@@ -15,4 +15,4 @@ This gamemode has yet to be fully released and is currently in early testing.
 ## Credits
 [TeamPopplio](https://github.com/TeamPopplio/) (Main development)
 
-[IceboundcCat6](https://www.reddit.com/user/IceboundCat6) (Original idea on [Reddit](https://www.reddit.com/r/tf2/comments/j7gznz/tf2_among_us_gamemode_idea/))
+[IceboundCat6](https://www.reddit.com/user/IceboundCat6) (Original idea on [Reddit](https://www.reddit.com/r/tf2/comments/j7gznz/tf2_among_us_gamemode_idea/))
