@@ -1,4 +1,17 @@
-//Original concept by u/IceboundCat6, brought to life by u/MouseDroidPoW
+/*
+-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+tf-amongus: Among Us recreated within TF2
+
+Sorry if the code is messy, this is my
+second plugin and it's been quite an
+ambitous project for myself and others.
+
+Original Concept - IceboundCat6
+Lead Development - MouseDroidPoW
+
+(Feel free to add your name here)
+-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+*/
 
 #include <sourcemod>
 #include <tf2>
@@ -8,9 +21,7 @@
 #include <tf2items>
 #include <tf2items_giveweapon>
 #include <stocksoup/entity_prefabs>
-
-#undef REQUIRE_EXTENSIONS
-#include <steamtools>
+#include <steamtools> //should we still undef extensions? no documentation...
 
 #pragma semicolon 1
 #pragma newdecls optional
@@ -22,12 +33,17 @@
 #define KILL_SOUND "amongus/kill.mp3"
 #define SPAWN_SOUND "amongus/spawn.mp3"
 
-#define PLUGIN_VERSION "0.1.3"
+// https://forums.alliedmods.net/showthread.php?t=229013
+
+#define MAJOR_REVISION "0"
+#define MINOR_REVISION "1"
+#define STABLE_REVISION "4"
+#define PLUGIN_VERSION MAJOR_REVISION..."."...MINOR_REVISION..."."...STABLE_REVISION
 
 public Plugin myinfo =
 {
 	name = "[TF2] Among Us",
-	author = "IceboundCat6 & TeamPopplio",
+	author = "TeamPopplio, IceboundCat6",
 	description = "Among Us in TF2!",
 	version = PLUGIN_VERSION,
 	url = "https://github.com/TeamPopplio/tf-amongus"
@@ -71,6 +87,7 @@ enum SkinSwitchType
 {
 	Skin_ChatColor = 0, //sets the char[] to the chat color of the client
 	Skin_Name, //sets the char[] to color name of the client
+	Skin_NameWithSkin, //sets the char[] to the color name of the int provided
 	Skin_RenderColor //sets the client's render color to their respective color
 };
 
@@ -82,13 +99,12 @@ enum GhostReason
 	GhostReason_Generic //the player has been killed but the map is not tfau_theskeld
 };
 
-
-//I swear [MAXPLAYERS +1] is gonna come back and haunt me someday
-
-Reason currentMeeting = Reason_NoMeeting; //currently unused
+Reason currentMeeting = Reason_NoMeeting;
 PlayerState playerState[MAXPLAYERS +1];
 VotingState g_votingState;
+
 char voteAnnouncer[MAX_NAME_LENGTH];
+
 int g_knifeCount[MAXPLAYERS +1];
 int g_playerSkin[MAXPLAYERS +1];
 int activeImpostors = 0;
@@ -98,18 +114,23 @@ int votePlayerCorelation[MAXPLAYERS +1]; //reverse: key = vote id, value = user 
 int voteStorage[MAXPLAYERS +2]; //plus 1 extra because last slot will be used for skip
 int firstVote; //used for ejection
 int secondVote; //used to test for a tie
+
 Handle g_hHud;
-Handle persistentUITimer[MAXPLAYERS +1];
+Handle persistentUITimer[MAXPLAYERS +1]=INVALID_HANDLE;
 Handle g_hWeaponEquip;
+
+ConVar versionCvar;
 ConVar knifeConVarCount;
+ConVar requiredToStart;
 ConVar impostorCount;
 ConVar preVotingCount;
 ConVar votingCount;
 ConVar ejectionCount;
 ConVar anonymousEjection;
+
 ArrayList g_aSpawnPoints;
 
-public OnMapStart()
+public void OnMapStart()
 {
 	PrecacheModel(SPY_MODEL, true);
 	PrecacheSound(RECHARGE_SOUND, true);
@@ -119,74 +140,135 @@ public OnMapStart()
 	PrecacheSound(SPAWN_SOUND, true);
 }
 
-public void OnPluginStart()
+public OnConfigsExecuted()
 {
 	char gameDesc[64];
 	Format(gameDesc, sizeof(gameDesc), "Among Us (%s)", PLUGIN_VERSION);
 	Steam_SetGameDescription(gameDesc);
-	HookEvent("player_spawn", OnPlayerSpawn, EventHookMode_Post);
-	HookEvent("teamplay_round_start", GameStart);
-	HookEvent("player_disconnect", Event_PlayerDisconnect, EventHookMode_Post);
+}
+
+public void OnPluginStart()
+{
+	LogMessage("[TF2] Among Us - Initalizing! (v%s)", PLUGIN_VERSION);
+
+	// --- Variables
+
+	char oldVersion[64];
+	g_hHud = CreateHudSynchronizer();
+
+	// --- Commands
+
+	versionCvar = CreateConVar("sm_amongus_version", PLUGIN_VERSION, "Among Us version - do not modify!", FCVAR_REPLICATED|FCVAR_NOTIFY|FCVAR_SPONLY|FCVAR_DONTRECORD);
+	requiredToStart = CreateConVar("sm_amongus_requiredtostart", "2", "Sets the amount of players required to start the game.");
 	impostorCount = CreateConVar("sm_amongus_impostorcount", "1", "Sets the amount of impostors that can be applied in a single game.");
 	knifeConVarCount = CreateConVar("sm_amongus_knifecount", "20", "Sets how many seconds an impostor should wait before being able to use their knife.");
 	preVotingCount = CreateConVar("sm_amongus_prevotingtimer", "30", "Sets how many seconds a vote should wait before starting.");
 	votingCount = CreateConVar("sm_amongus_votingtimer", "30", "Sets how many seconds a vote should last before ejection.");
 	ejectionCount = CreateConVar("sm_amongus_ejectiontimer", "10", "Sets how many seconds ejection should last.");
 	anonymousEjection = CreateConVar("sm_amongus_anonymousejection", "0", "Enable (1) or disable (0) anonymous ejection.");
+
 	RegAdminCmd("sm_amongus_becomeimpostor", Command_BecomeImpostor, ADMFLAG_SLAY|ADMFLAG_CHEATS, "sm_becomeimpostor <#userid|name>");
-	g_hHud = CreateHudSynchronizer();
-	//we want people to use the voice menu as a way to sabotage or report a body
+
+	// --- Hooks
+
+	HookEvent("player_spawn", OnPlayerSpawn, EventHookMode_Post);
+	HookEvent("teamplay_round_start", GameStart);
+	HookEvent("player_disconnect", Event_PlayerDisconnect, EventHookMode_Post);
+	HookEvent("player_sapped_object", Event_Sapped);
+	HookEvent("player_changeclass", NoEvent);
+	// --- Command Listeners
+
 	AddCommandListener(Listener_Voice, "voicemenu");
-	//we only want people to type in chat if they are allowed to (and if they can see it)
 	AddCommandListener(Listener_Chat, "say");
 	AddCommandListener(Listener_Chat, "say_team");
-	//we don't wan't people killing themselves
 	AddCommandListener(Listener_Death, "kill");
 	AddCommandListener(Listener_Death, "explode");
-	//AddCommandListener(Listener_Death, "hurtme"); //disabled for debug do we really need this?
+	//AddCommandListener(Listener_Death, "jointeam");
+	
+	// --- Translations
+
+	LoadTranslations("amongus.phrases");
+	LoadTranslations("common.phrases");
+
+	// --- Misc.
+
+	AutoExecConfig(true, "AmongUs");
+	GetConVarString(versionCvar, oldVersion, sizeof(oldVersion));
+	if(strcmp(oldVersion, PLUGIN_VERSION, false))
+		PrintToServer("[TF2] Among Us - Your config may be outdated. Back up tf/cfg/sourcemod/AmongUs.cfg and delete it, this plugin will generate a new one that you can then modify to your original values.");
 }
 
-public Action:Listener_Voice(client, const String:command[], argc)
+//this is just base code for tasks when they get added
+// https://forums.alliedmods.net/showthread.php?p=1329948
+public Action Event_Sapped(Handle:event, const String:name[], bool:dontBroadcast)
+{
+	//ownerid is gonna be an invalid client because it's a map placed entity
+	new sapper = GetEventInt(event, "sapperid");
+	if(IsValidEntity(sapper))
+		AcceptEntityInput(sapper, "Kill");
+}
+
+public Action NoEvent(Handle:event, const String:name[], bool:dontBroadcast)
+{
+	return Plugin_Handled;
+}
+
+public Action Listener_Voice(client, const String:command[], argc)
 {
 	if(playerState[client] == State_Ghost || playerState[client] == State_ImpostorGhost)
 		return Plugin_Handled;
+
 	int entity = GetClientAimTarget(client, false);
-	decl String:targetname[128];
+	char targetname[128];
 	int skin;
+	char classname[MAX_NAME_LENGTH];
+
 	if (IsValidEntity(entity))
 	{
-		GetEntPropString(entity, Prop_Data, "m_iName", targetname, sizeof(targetname));
-		skin = GetEntProp(entity, Prop_Data, "m_nSkin");
-		if(StrEqual(targetname,"deadbody",true))
+		GetEntPropString(entity, Prop_Data, "m_iClassname", classname, sizeof(classname));
+		if(StrEqual(classname,"prop_dynamic"))
 		{
-			AcceptEntityInput(entity, "ClearParent");
-			AcceptEntityInput(entity, "Kill");
-			StartMeeting(client, Reason_FoundBody, skin);
+			GetEntPropString(entity, Prop_Data, "m_iName", targetname, sizeof(targetname));
+			skin = GetEntProp(entity, Prop_Data, "m_nSkin");
+			if(StrEqual(targetname,"deadbody",true))
+			{
+				if(g_votingState == VotingState_NoVote)
+				{
+					AcceptEntityInput(entity, "ClearParent");
+					AcceptEntityInput(entity, "Kill");
+					StartMeeting(client, Reason_FoundBody, skin);
+				}
+			}
 		}
 	}
+
 	return Plugin_Handled;
 }
 
 //make sure the round doesn't linger when people leave
-public Action:Event_PlayerDisconnect(Handle:event, String:name[], bool:dontBroadcast)
+public Action Event_PlayerDisconnect(Handle:event, String:name[], bool:dontBroadcast)
 {
 	new client = GetClientOfUserId(GetEventInt(event, "userid"));
+
 	if(playerState[client] == State_Impostor)
 		activeImpostors--;
-	if(activeImpostors == 0) //still 0? player was last impostor
+	if(activeImpostors == 0) //player was last impostor
 		RoundWon(State_Crewmate);
 	else if(GetNonGhostTeamCount(TFTeam_Red)-1 <= 1)
 		RoundWon(State_Impostor);
+		
 	return Plugin_Handled;
 }
 
 //chat when appropriate
-public Action:Listener_Chat(client, const String:command[], argc)
+public Action Listener_Chat(client, const String:command[], argc)
 {
 	if(g_votingState == VotingState_NoVote || g_votingState == VotingState_Ejection)
 		return Plugin_Handled;
+
 	char speech[MAX_MESSAGE_LENGTH];
 	int start = 0;
+
 	GetCmdArgString(speech,sizeof(speech));
 	if (speech[0] == '"')
 	{
@@ -195,8 +277,10 @@ public Action:Listener_Chat(client, const String:command[], argc)
 		if (speech[length-1] == '"')
 			speech[length-1] = '\0';
 	}
+
 	char newSpeech[MAX_MESSAGE_LENGTH];
 	strcopy(newSpeech, sizeof(speech), speech[start]);
+
 	for(new i = 1; i <= MaxClients; i++)
 	{
 		if(IsValidClient(i))
@@ -212,23 +296,26 @@ public Action:Listener_Chat(client, const String:command[], argc)
 				case State_Impostor:
 				{
 					if(playerState[i] == State_Impostor)
-						CPrintToChatEx(i, client, "{default}*Impostor* %s%N{default} :  %s", chatColor, client, newSpeech);
+						CPrintToChatEx(i, client, "{default}%t %s%N{default} :  %s", "impostor_prefix", chatColor, client, newSpeech);
+					else
+						CPrintToChatEx(i, client, "%s%N{default} :  %s", chatColor, client, newSpeech);
 				}
 				case State_Ghost:
 				{
 					if(playerState[i] == State_Ghost || playerState[i] == State_ImpostorGhost)
-						CPrintToChatEx(i, client, "{default}(GHOST) %s%N{default} :  %s", chatColor, client, newSpeech);
+						CPrintToChatEx(i, client, "{default}%t %s%N{default} :  %s", "ghost_prefix", chatColor, client, newSpeech);
 				}
 				case State_ImpostorGhost:
 				{
 					if(playerState[i] == State_Ghost)
-						CPrintToChatEx(i, client, "{default}(GHOST) %s%N{default} :  %s", chatColor, client, newSpeech);
+						CPrintToChatEx(i, client, "{default}%t %s%N{default} :  %s", "ghost_prefix", chatColor, client, newSpeech);
 					else if(playerState[i] == State_ImpostorGhost)
-						CPrintToChatEx(i, client, "{default}(GHOST) *Impostor* %s%N{default} :  %s", chatColor, client, newSpeech);
+						CPrintToChatEx(i, client, "{default}%t %t %s%N{default} :  %s", "ghost_prefix", "impostor_prefix", chatColor, client, newSpeech);
 				}
 			}
 		}
 	}
+
 	return Plugin_Handled;
 }
 
@@ -237,6 +324,7 @@ public Action OnPlayerSpawn(Handle hEvent, char[] strEventName, bool bDontBroadc
 {
 	int iClient = GetClientOfUserId(GetEventInt(hEvent, "userid"));
 	if (!IsValidClient(iClient)) return;
+
 	TF2_ChangeClientTeam(iClient,TFTeam_Red);
 	TFClassType iClass = TF2_GetPlayerClass(iClient);
 	if (!(iClass == view_as<TFClassType>(TFClass_Unknown)))
@@ -252,13 +340,12 @@ public Action OnPlayerSpawn(Handle hEvent, char[] strEventName, bool bDontBroadc
 	TF2_RemoveWeaponSlot(iClient,5); //there seven
 	TF2_RemoveWeaponSlot(iClient,6); //weapon slots
 	new weapon = GetPlayerWeaponSlot(iClient, 1); //switch to sapper, we only want players to use the sapper otherwise they could just kill eachother outright with friendly fire
-	//also noteworthy: the sapper will be used for tasks and shouldn't be replaced as I want to hook into sapper placement
 	SetEntPropEnt(iClient, Prop_Send, "m_hActiveWeapon", weapon);
 }
  
 public int VoteHandler1 (Menu menu, MenuAction action, int param1, int param2)
 {
-	char info[32];
+	char info[MAX_NAME_LENGTH];
 	menu.GetItem(param2, info, sizeof(info));
 	if (action == MenuAction_Select)
 	{
@@ -266,18 +353,22 @@ public int VoteHandler1 (Menu menu, MenuAction action, int param1, int param2)
 		{
 			int votedFor = GetClientOfUserId(votePlayerCorelation[StringToInt(info)]);
 			char chatColor[MAX_NAME_LENGTH];
+			char nameOfParam1[MAX_NAME_LENGTH];
+			char nameOfVotedFor[MAX_NAME_LENGTH];
 			SkinSwitch(param1, Skin_ChatColor, chatColor);
+			Format(nameOfParam1, MAX_NAME_LENGTH, "%s%N", chatColor, param1);
 			if(votedFor > 0)
 			{
 				voteStorage[votedFor] += 1;
 				char chatColor2[MAX_NAME_LENGTH];
-				SkinSwitch(votedFor, Skin_ChatColor, chatColor);
-				CPrintToChatAll("{default}* %s%N {default}has voted for %s%N{default}!",chatColor,param1,chatColor2,votedFor);
+				SkinSwitch(votedFor, Skin_ChatColor, chatColor2);
+				Format(nameOfVotedFor, MAX_NAME_LENGTH, "%s%N", chatColor2, votedFor);
+				CPrintToChatAll("{default}* %t","voted",nameOfParam1,nameOfVotedFor);
 			}
-			else //assume you voted skip
+			else //assume you voted skip, might break listen servers
 			{
 				voteStorage[MAXPLAYERS+1] += 1;
-				CPrintToChatAll("{default}* %s%N {default}has voted to skip!",chatColor,param1);
+				CPrintToChatAll("{default}* %t","skipped",nameOfParam1);
 			}
 			alreadyVoted[param1] = 1;
 			return 1;
@@ -299,11 +390,11 @@ public void DrawVotingPanels(client)
 			votePlayerCorelation[i+1] = GetClientUserId(i);
 			char name[MAX_NAME_LENGTH];
 			char itemnum[255];
-			IntToString(i+1,itemnum,2);
+			IntToString(i+1,itemnum,2); //this is causing some votes to count as "skipped" when they aren't?
 			char nameOfBody[MAX_NAME_LENGTH];
 			SkinSwitch(i, Skin_Name, nameOfBody);
 			if((playerState[i] == State_Impostor && playerState[client] == State_Impostor) || (playerState[i] == State_ImpostorGhost && playerState[client] == State_ImpostorGhost))
-				Format(name,MAX_NAME_LENGTH,"%N (%s) (Impostor)", i, nameOfBody);
+				Format(name,MAX_NAME_LENGTH,"%N (%s) %t", i, nameOfBody, "impostor_votingdiscriminator");
 			else
 				Format(name,MAX_NAME_LENGTH,"%N (%s)", i, nameOfBody);
 			if(playerState[i] == State_Ghost || playerState[i] == State_ImpostorGhost)
@@ -328,36 +419,8 @@ public void StartMeeting(int announcer, Reason reason, int skinOfBody)
 		return;
 	int iSkin = 0; //0 - 11
 	char nameOfBody[MAX_NAME_LENGTH];
-
-	switch(skinOfBody)
-	{
-		case 0:
-			Format(nameOfBody, 32, "Red"); //red
-		case 1:
-			Format(nameOfBody, 32, "Blue"); //blue
-		case 2:
-			Format(nameOfBody, 32, "Black"); //black
-		case 3:
-			Format(nameOfBody, 32, "Brown"); //brown
-		case 4:
-			Format(nameOfBody, 32, "Cyan"); //cyan
-		case 5:
-			Format(nameOfBody, 32, "Green"); //green
-		case 6:
-			Format(nameOfBody, 32, "Lime"); //lime
-		case 7:
-			Format(nameOfBody, 32, "Orange"); //orange
-		case 8:
-			Format(nameOfBody, 32, "Pink"); //pink
-		case 9:
-			Format(nameOfBody, 32, "Purple"); //purple
-		case 10:
-			Format(nameOfBody, 32, "White"); //white
-		case 11:
-			Format(nameOfBody, 32, "Yellow"); //yellow
-		default:
-			Format(nameOfBody, 32, "someone");
-	}
+	SkinSwitch(skinOfBody, Skin_NameWithSkin, nameOfBody);
+	Format(voteAnnouncer,MAX_NAME_LENGTH,"%N",announcer);
 	for(new Client = 1; Client <= MaxClients; Client++)
 	{
 		if(IsValidClient(Client) && TF2_GetClientTeam(Client) == TFTeam_Red)
@@ -376,12 +439,12 @@ public void StartMeeting(int announcer, Reason reason, int skinOfBody)
 			{
 				case Reason_FoundBody:
 				{
-					PrintCenterText(Client,"%N has found %s's dead body!",announcer,nameOfBody);
+					PrintCenterText(Client,"%t","reason_foundbody",voteAnnouncer,nameOfBody);
 					EmitSoundToClient(Client,FOUNDBODY_SOUND);
 				}
 				case Reason_EmergencyButton:
 				{
-					PrintCenterText(Client,"%N has called for an emergency meeting!",announcer);
+					PrintCenterText(Client,"%t","reason_emergencybutton",voteAnnouncer);
 					EmitSoundToClient(Client,EMERGENCY_SOUND);
 				}
 			}
@@ -393,7 +456,6 @@ public void StartMeeting(int announcer, Reason reason, int skinOfBody)
 			SetEntityMoveType(Client, MOVETYPE_NONE);
 		}
 	}
-	Format(voteAnnouncer,MAX_NAME_LENGTH,"%N",announcer);
 	g_votingState = VotingState_PreVoting;
 	CreateTimer(preVotingCount.FloatValue, VoteTimer);
 }
@@ -506,8 +568,7 @@ public Action GameStart(Handle event, char[] name, bool:Broadcast) {
 	{
 		SetFailState("Failed to prepare the SDKCall for giving weapons. Try updating gamedata or restarting your server.");
 	}
-	if(activeImpostors <= 0)
-		activeImpostors = impostorCount.IntValue; //set the value initially
+	activeImpostors = impostorCount.IntValue; //set the value initially
 	firstVote = 0;
 	secondVote = 0;
 	currentMeeting = Reason_NoMeeting;
@@ -521,23 +582,25 @@ public Action GameStart(Handle event, char[] name, bool:Broadcast) {
 		g_aSpawnPoints.Push(ent);
 	}
 	//find out who is the impostor if there are enough players
-	if(GetTeamClientCount(view_as<int>(TFTeam_Red)) >= (2*impostorCount.IntValue))
+	if(GetTeamClientCount(view_as<int>(TFTeam_Red)) >= requiredToStart.IntValue)
 	{
 		int iSkin = 0; //0 - 11
 		for(new Client = 1; Client <= MaxClients; Client++)
 		{
 			if(IsValidClient(Client) && TF2_GetClientTeam(Client) == TFTeam_Red)
 			{
-				//let's play: how much of this can be moved to OnPlayerSpawn? ready? see you in major version 1
-				EmitSoundToClient(Client, SPAWN_SOUND); //among who
+				EmitSoundToClient(Client, SPAWN_SOUND);
 				g_knifeCount[Client] = -1; //crewmates shouldn't have a knife count
-				PrintCenterText(Client,"You are a crewmate!");
+				PrintCenterText(Client,"%t","state_crewmate");
 				voteStorage[Client] = 0;
 				playerState[Client] = State_Crewmate;
 				SDKUnhook(Client,SDKHook_SetTransmit,Hook_SetTransmit);
 				SDKUnhook(Client, SDKHook_OnTakeDamage, OnTakeDamage);
 				if(persistentUITimer[Client] != INVALID_HANDLE)
-					KillTimer(persistentUITimer[Client],false); //kill or suffer the pain of eventual near-instant timers 
+				{
+					KillTimer(persistentUITimer[Client],false); //kill or suffer the pain of eventual near-instant timers
+					persistentUITimer[Client] = INVALID_HANDLE;
+				} 
 				persistentUITimer[Client] = CreateTimer(1.0, UITimer, GetClientUserId(Client), TIMER_REPEAT); //this should be the one and only UI timer for the client, for now
 				SetVariantString(SPY_MODEL); //let's get our custom model in
 				AcceptEntityInput(Client, "SetCustomModel"); //yeah set it in place :)
@@ -573,7 +636,7 @@ public Action GameStart(Handle event, char[] name, bool:Broadcast) {
 			while(!IsClientInGame(randomClient) || TF2_GetClientTeam(randomClient) != TFTeam_Red || playerState[randomClient] == State_Impostor);
 			
 			playerState[randomClient] = State_Impostor;
-			PrintCenterText(randomClient,"You are an impostor!");
+			PrintCenterText(randomClient,"%t","state_impostor");
 			g_knifeCount[randomClient] = knifeConVarCount.IntValue;
 			int glow = TF2_AttachBasicGlow(randomClient, TFTeam_Red); //impostors get a nice glow effect
 			SetEntityRenderColor(glow, 255, 0, 0, 0);
@@ -582,7 +645,7 @@ public Action GameStart(Handle event, char[] name, bool:Broadcast) {
 	}
 	else
 	{
-		PrintCenterTextAll("There are not enough players for %d impostor(s)! (%d/%d)",impostorCount.IntValue,GetTeamClientCount(view_as<int>(TFTeam_Red)),(2*impostorCount.IntValue));
+		PrintCenterTextAll("%t","notenoughplayers",impostorCount.IntValue,GetTeamClientCount(view_as<int>(TFTeam_Red)),requiredToStart.IntValue);
 	}
 }
 
@@ -600,7 +663,7 @@ stock bool IsValidClient(int iClient, bool bAlive = false)
 	return false;
 }
 
-public Action:Listener_Death(client, const String:command[], argc)
+public Action Listener_Death(client, const String:command[], argc)
 {
 	return Plugin_Handled; //when the player uses 'kill' or 'explode' we don't want to do anything
 }
@@ -626,34 +689,39 @@ public Action UITimer(Handle timer, int userid)
 		case VotingState_PreVoting:
 		{
 			SetHudTextParams(0.15, 0.15, 3.0, 255, 255, 255, 255, 1, 6.0, 0.1, 0.1);
-			ShowSyncHudText(client, g_hHud, "Discuss!\n%s has started the vote!\n%d seconds until voting starts.",voteAnnouncer,voteCounter[client]);
+			ShowSyncHudText(client, g_hHud, "%t\n%t\n%t","votingstate_prevoting","startedvote",voteAnnouncer,"untilvotingstarts",voteCounter[client]);
 		}
 		case VotingState_Voting:
 		{
 			SetHudTextParams(0.15, 0.15, 3.0, 255, 255, 255, 255, 1, 6.0, 0.1, 0.1);
-			ShowSyncHudText(client, g_hHud, "Vote now!\n%s has started the vote!\n%d seconds until voting ends.",voteAnnouncer,voteCounter[client]);
+			ShowSyncHudText(client, g_hHud, "%t\n%t\n%t","votingstate_voting","startedvote",voteAnnouncer,"untilvotingends",voteCounter[client]);
 		}
 		case VotingState_Ejection:
 		{
 			SetHudTextParams(0.15, 0.15, 3.0, 255, 255, 255, 255, 1, 6.0, 0.1, 0.1);
+			char nameOfFirstVote[MAX_NAME_LENGTH];
+			if(IsValidClient(firstVote))
+				Format(nameOfFirstVote,MAX_NAME_LENGTH,"%N",firstVote);
 			switch(currentMeeting)
 			{
 				case Reason_Anonymous:
-					ShowSyncHudText(client, g_hHud, "%N was ejected.\n%d seconds until ejection ends.",firstVote,voteCounter[client]);
+					ShowSyncHudText(client, g_hHud, "%t\n%t","reason_anonymous",nameOfFirstVote,"untilejectionends",voteCounter[client]);
 				case Reason_Crewmate:
-					ShowSyncHudText(client, g_hHud, "%N was not an impostor.\n%d impostor(s) remain.\n%d seconds until ejection ends.",firstVote,activeImpostors,voteCounter[client]);
+					ShowSyncHudText(client, g_hHud, "%t\n%t\n%t","reason_crewmate",nameOfFirstVote,"impostorsremain",activeImpostors,"untilejectionends",voteCounter[client]);
 				case Reason_Impostor:
-					ShowSyncHudText(client, g_hHud, "%N was an impostor.\n%d impostor(s) remain.\n%d seconds until ejection ends.",firstVote,activeImpostors,voteCounter[client]);
+					ShowSyncHudText(client, g_hHud, "%t\n%t\n%t","reason_impostor",nameOfFirstVote,"impostorsremain",activeImpostors,"untilejectionends",voteCounter[client]);
 				case Reason_Tie:
-					ShowSyncHudText(client, g_hHud, "No one was ejected. (Tie)\n%d seconds until ejection ends.",voteCounter[client]);
+					ShowSyncHudText(client, g_hHud, "%t\n%t","reason_tie","untilejectionends",voteCounter[client]);
 				case Reason_Skip:
-					ShowSyncHudText(client, g_hHud, "No one was ejected. (Skipped)\n%d seconds until ejection ends.",voteCounter[client]);
+					ShowSyncHudText(client, g_hHud, "%t\n%t","reason_skip","untilejectionends",voteCounter[client]);
 				case Reason_Disconnected:
-					ShowSyncHudText(client, g_hHud, "No one was ejected. (Player disconnected)\n%d seconds until ejection ends.",voteCounter[client]);
+					ShowSyncHudText(client, g_hHud, "%t\n%t","reason_disconnected","untilejectionends",voteCounter[client]);
 				default:
-					ShowSyncHudText(client, g_hHud, "%d seconds until ejection ends.",voteCounter[client]);
+					ShowSyncHudText(client, g_hHud, "%t","untilejectionends",voteCounter[client]);
 			}
 		}
+		case VotingState_EndOfRound:
+			persistentUITimer[client] = INVALID_HANDLE; //this ain't working, oh well
 		default:
 		{
 			switch(playerState[client])
@@ -661,27 +729,27 @@ public Action UITimer(Handle timer, int userid)
 				case (State_Crewmate):
 				{
 					SetHudTextParams(0.15, 0.15, 3.0, 255, 255, 255, 255, 1, 6.0, 0.1, 0.1);
-					ShowSyncHudText(client, g_hHud, "Tasks:");
+					ShowSyncHudText(client, g_hHud, "%t","tasks");
 				}
 				case (State_Impostor):
 				{
 					SetHudTextParams(0.15, 0.15, 3.0, 255, 0, 0, 255, 1, 6.0, 0.1, 0.1);
 					if (g_knifeCount[client] > 1)
-						ShowSyncHudText(client, g_hHud, "You can use your knife in %d seconds.\nSabotage and kill everyone.\nFake Tasks:",g_knifeCount[client]);
+						ShowSyncHudText(client, g_hHud, "%t\n%t\n%t","knifedelayplural",g_knifeCount[client],"impostor_description","faketasks");
 					else if (g_knifeCount[client] > 0)
-						ShowSyncHudText(client, g_hHud, "You can use your knife in %d second.\nSabotage and kill everyone.\nFake Tasks:",g_knifeCount[client]);
+						ShowSyncHudText(client, g_hHud, "%t\n%t\n%t","knifedelay",g_knifeCount[client],"impostor_description","faketasks");
 					else
-						ShowSyncHudText(client, g_hHud, "Sabotage and kill everyone.\nFake Tasks:",g_knifeCount[client]);
+						ShowSyncHudText(client, g_hHud, "%t\n%t","impostor_description","faketasks");
 				}
 				case (State_ImpostorGhost):
 				{
 					SetHudTextParams(0.15, 0.15, 3.0, 255, 0, 0, 255, 1, 6.0, 0.1, 0.1);
-					ShowSyncHudText(client, g_hHud, "You are dead.\nYou can still sabotage.");
+					ShowSyncHudText(client, g_hHud, "%t\n%t","dead","impostorghost_description");
 				}
 				default:
 				{
 					SetHudTextParams(0.15, 0.15, 3.0, 255, 255, 255, 255, 1, 6.0, 0.1, 0.1);
-					ShowSyncHudText(client, g_hHud, "You are dead.\nFinish your tasks to win!\nTasks:");
+					ShowSyncHudText(client, g_hHud, "%t\n%t\n%t","dead","ghost_description","tasks");
 				}
 			}
 		}
@@ -691,7 +759,7 @@ public Action UITimer(Handle timer, int userid)
 }
 
 //impostor has hurt someone! (friendly fire must be on)
-public Action:OnTakeDamage(client, &attacker, &inflictor, &Float:damage, &damagetype)
+public Action OnTakeDamage(client, &attacker, &inflictor, &Float:damage, &damagetype)
 {
 	if(playerState[client] == State_Impostor)
 		return Plugin_Handled;
@@ -736,7 +804,7 @@ public Action:OnTakeDamage(client, &attacker, &inflictor, &Float:damage, &damage
 	return Plugin_Handled;
 }
 
-public Action:Hook_SetTransmitImpostor(entity, client)
+public Action Hook_SetTransmitImpostor(entity, client)
 {
 	int ent = GetEntPropEnt(entity, Prop_Data, "m_hEffectEntity");
 	switch(playerState[client])
@@ -751,7 +819,7 @@ public Action:Hook_SetTransmitImpostor(entity, client)
 	return Plugin_Handled;
 }
 
-public Action:Hook_SetTransmit(entity, client)
+public Action Hook_SetTransmit(entity, client)
 {
 	if (entity == client || playerState[client] == State_Ghost || playerState[client] == State_ImpostorGhost)
 		return Plugin_Continue;
@@ -774,17 +842,17 @@ public void RoundWon(PlayerState winners)
 		case (State_Crewmate):
 		{
 			SetVariantInt(2);
-			PrintCenterTextAll("Crewmates win!");
+			PrintCenterTextAll("%t","crewmates_win");
 		}
 		case (State_Impostor):
 		{
 			SetVariantInt(3);
-			PrintCenterTextAll("Impostors win!");
+			PrintCenterTextAll("%t","impostors_win");
 		}
 		default:
 		{
 			SetVariantInt(0);
-			PrintCenterTextAll("Nobody wins...");
+			PrintCenterTextAll("%t","default_win");
 		}
 	}
 	DispatchKeyValue(iEnt,"force_map_reset","1");
@@ -839,11 +907,10 @@ public Action Command_BecomeImpostor(int client, int args)
 	{
 		return Plugin_Handled;
 	}
-	
+	activeImpostors++;
 	for (int i = 0; i < target_count; i++)
 	{
 		LogAction(client, target_list[i], "\"%L\" set \"%L\" as an impostor!", client, target_list[i]);
-		//activeImpostors++;
 		playerState[target_list[i]] = State_Impostor;
 		g_knifeCount[target_list[i]] = 0;
 	}
@@ -851,7 +918,7 @@ public Action Command_BecomeImpostor(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action:TF2Items_OnGiveNamedItem(client, String:classname[], iItemDefinitionIndex, &Handle:hItem)
+public Action TF2Items_OnGiveNamedItem(client, String:classname[], iItemDefinitionIndex, &Handle:hItem)
 {
 	if (StrEqual(classname, "tf_wearable"))
 	{
@@ -902,11 +969,23 @@ public void SkinSwitchC(int client)
 	SkinSwitch(client, Skin_RenderColor, "");
 }
 
-public void SkinSwitch(int client, SkinSwitchType type, char[] chatColor)
+public void SkinSwitch(int client, SkinSwitchType basetype, char[] chatColor)
 {
-	if(!IsValidClient(client))
-		return;
-	switch(g_playerSkin[client])
+	SkinSwitchType type;
+	int skin;
+	if(basetype == Skin_NameWithSkin)
+	{
+		skin = client;
+		type = Skin_Name;
+	}
+	else
+	{
+		if(!IsValidClient(client))
+			return;
+		skin = g_playerSkin[client];
+		type = basetype;
+	}
+	switch(skin)
 	{
 		case 0:
 		{
@@ -915,7 +994,7 @@ public void SkinSwitch(int client, SkinSwitchType type, char[] chatColor)
 				case Skin_ChatColor:
 					Format(chatColor, 32, "{red}");
 				case Skin_Name:
-					Format(chatColor, 32, "Red");
+					Format(chatColor, MAX_NAME_LENGTH, "%t", "color_red");
 				case Skin_RenderColor:
 					SetEntityRenderColor(client, 255, 128, 128, 128);
 			}
@@ -928,7 +1007,7 @@ public void SkinSwitch(int client, SkinSwitchType type, char[] chatColor)
 				case Skin_ChatColor:
 					Format(chatColor, 32, "{blue}");
 				case Skin_Name:
-					Format(chatColor, 32, "Blue");
+					Format(chatColor, MAX_NAME_LENGTH, "%t", "color_blue");
 				case Skin_RenderColor:
 					SetEntityRenderColor(client, 128, 128, 255, 128);
 			}
@@ -941,7 +1020,7 @@ public void SkinSwitch(int client, SkinSwitchType type, char[] chatColor)
 				case Skin_ChatColor:
 					Format(chatColor, 32, "{darkgrey}");
 				case Skin_Name:
-					Format(chatColor, 32, "Black");
+					Format(chatColor, MAX_NAME_LENGTH, "%t", "color_black");
 				case Skin_RenderColor:
 					SetEntityRenderColor(client, 128, 128, 128, 128);
 			}
@@ -954,7 +1033,7 @@ public void SkinSwitch(int client, SkinSwitchType type, char[] chatColor)
 				case Skin_ChatColor:
 					Format(chatColor, 32, "{brown}");
 				case Skin_Name:
-					Format(chatColor, 32, "Brown");
+					Format(chatColor, MAX_NAME_LENGTH, "%t", "color_brown");
 				case Skin_RenderColor:
 					SetEntityRenderColor(client, 210, 180, 140, 128);
 			}
@@ -967,7 +1046,7 @@ public void SkinSwitch(int client, SkinSwitchType type, char[] chatColor)
 				case Skin_ChatColor:
 					Format(chatColor, 32, "{cyan}");
 				case Skin_Name:
-					Format(chatColor, 32, "Cyan");
+					Format(chatColor, MAX_NAME_LENGTH, "%t", "color_cyan");
 				case Skin_RenderColor:
 					SetEntityRenderColor(client, 0, 255, 255, 128);
 			}
@@ -980,7 +1059,7 @@ public void SkinSwitch(int client, SkinSwitchType type, char[] chatColor)
 				case Skin_ChatColor:
 					Format(chatColor, 32, "{darkgreen}");
 				case Skin_Name:
-					Format(chatColor, 32, "Green");
+					Format(chatColor, MAX_NAME_LENGTH, "%t", "color_green");
 				case Skin_RenderColor:
 					SetEntityRenderColor(client, 0, 128, 0, 128);
 			}
@@ -993,7 +1072,7 @@ public void SkinSwitch(int client, SkinSwitchType type, char[] chatColor)
 				case Skin_ChatColor:
 					Format(chatColor, 32, "{lime}");
 				case Skin_Name:
-					Format(chatColor, 32, "Lime");
+					Format(chatColor, MAX_NAME_LENGTH, "%t", "color_lime");
 				case Skin_RenderColor:
 					SetEntityRenderColor(client, 0, 255, 0, 128);
 			}
@@ -1005,7 +1084,7 @@ public void SkinSwitch(int client, SkinSwitchType type, char[] chatColor)
 				case Skin_ChatColor:
 					Format(chatColor, 32, "{orange}");
 				case Skin_Name:
-					Format(chatColor, 32, "Orange");
+					Format(chatColor, MAX_NAME_LENGTH, "%t", "color_orange");
 				case Skin_RenderColor:
 					SetEntityRenderColor(client, 255, 165, 0, 128);
 			}
@@ -1017,7 +1096,7 @@ public void SkinSwitch(int client, SkinSwitchType type, char[] chatColor)
 				case Skin_ChatColor:
 					Format(chatColor, 32, "{hotpink}");
 				case Skin_Name:
-					Format(chatColor, 32, "Pink");
+					Format(chatColor, MAX_NAME_LENGTH, "%t", "color_pink");
 				case Skin_RenderColor:
 					SetEntityRenderColor(client, 255, 105, 180, 128);
 			}
@@ -1029,7 +1108,7 @@ public void SkinSwitch(int client, SkinSwitchType type, char[] chatColor)
 				case Skin_ChatColor:
 					Format(chatColor, 32, "{purple}");
 				case Skin_Name:
-					Format(chatColor, 32, "Purple");
+					Format(chatColor, MAX_NAME_LENGTH, "%t", "color_purple");
 				case Skin_RenderColor:
 					SetEntityRenderColor(client, 255, 105, 180, 128);
 			}
@@ -1041,7 +1120,7 @@ public void SkinSwitch(int client, SkinSwitchType type, char[] chatColor)
 				case Skin_ChatColor:
 					Format(chatColor, 32, "{white}");
 				case Skin_Name:
-					Format(chatColor, 32, "White");
+					Format(chatColor, MAX_NAME_LENGTH, "%t", "color_white");
 				case Skin_RenderColor:
 					SetEntityRenderColor(client, 255, 255, 255, 128);
 			}
@@ -1053,7 +1132,7 @@ public void SkinSwitch(int client, SkinSwitchType type, char[] chatColor)
 				case Skin_ChatColor:
 					Format(chatColor, 32, "{yellow}");
 				case Skin_Name:
-					Format(chatColor, 32, "Yellow");
+					Format(chatColor, MAX_NAME_LENGTH, "%t", "color_yellow");
 				case Skin_RenderColor:
 					SetEntityRenderColor(client, 255, 255, 0, 128);
 			}
@@ -1065,7 +1144,7 @@ public void SkinSwitch(int client, SkinSwitchType type, char[] chatColor)
 				case Skin_ChatColor:
 					Format(chatColor, 32, "{default}");
 				case Skin_Name:
-					Format(chatColor, 32, "someone");
+					Format(chatColor, MAX_NAME_LENGTH, "%t", "color_default");
 				case Skin_RenderColor:
 					SetEntityRenderColor(client, 255, 255, 255, 128);
 			}
@@ -1078,15 +1157,25 @@ public void ApplyGhostEffect(int client, GhostReason reason)
 	switch(reason)
 	{
 		case GhostReason_Killed:
-			PrintCenterText(client,"You have been killed!");
+			PrintCenterText(client,"%t","ghostreason_killed");
 		case GhostReason_Suicide:
-			PrintCenterText(client,"You died on your own!");
+			PrintCenterText(client,"%t","ghostreason_suicide");
 		case GhostReason_Ejected:
-			PrintCenterText(client,"You have been ejected!");
+			PrintCenterText(client,"%t","ghostreason_ejected");
 		default:
-			PrintCenterText(client,"You died!");
+			PrintCenterText(client,"%t","ghostreason_generic");
 	}
 	SDKHook(client,SDKHook_SetTransmit,Hook_SetTransmit);
 	SetEntityMoveType(client, MOVETYPE_NOCLIP);
 	SkinSwitchC(client);
 }
+
+/*
+　　ﾟ　　　　　　. ,　　　　.　 
+　　　.　　　 　　.　　　　　　　 　.
+.　　 。　　　　　 ඞ 。 . 　　 • 　　　　•
+　　ﾟ　　　.　　　. 　　　　.　 .
+　　　.　　 　　.  　　.　　。　　 。　.
+*/
+
+//just for fun, remove this if unicode breaks or something

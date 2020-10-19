@@ -1,0 +1,226 @@
+"Phrases"
+{
+	"impostor_prefix"
+	{
+		"en"	"*Impostor*"
+	}
+	"ghost_prefix"
+	{
+		"en"    "(GHOST)"
+	}
+	"impostor_votingdiscriminator"
+	{
+		"en"	"(Impostor)"
+	}
+	"color_red"
+	{
+		"en"	"Red"
+	}
+	"color_blue"
+	{
+		"en"	"Blue"
+	}
+	"color_black"
+	{
+		"en"	"Black"
+	}
+	"color_brown"
+	{
+		"en"	"Brown"
+	}
+	"color_cyan"
+	{
+		"en"	"Cyan"
+	}
+	"color_green"
+	{
+		"en"	"Green"
+	}
+	"color_lime"
+	{
+		"en"	"Lime"
+	}
+	"color_orange"
+	{
+		"en"	"Orange"
+	}
+	"color_orange"
+	{
+		"en"	"Orange"
+	}
+	"color_pink"
+	{
+		"en"	"Pink"
+	}
+	"color_purple"
+	{
+		"en"	"Purple"
+	}
+	"color_white"
+	{
+		"en"	"White"
+	}
+	"color_yellow"
+	{
+		"en"	"Yellow"
+	}
+	"color_default"
+	{
+		"en"	"someone"
+	}
+	"reason_foundbody"
+	{
+		"#format"	"{1:s},{2:s}"
+		"en"	"{1} has found {2}'s dead body!"
+	}
+	"reason_emergencybutton"
+	{
+		"#format"	"{1:s}"
+		"en"	"{1} has called for an emergency meeting!"
+	}
+	"state_crewmate"
+	{
+		"en"	"You are a crewmate!"
+	}
+	"state_impostor"
+	{
+		"en"	"You are an impostor!"
+	}
+	"voted"
+	{
+		"#format"	"{1:s},{2:s}"
+		"en"	"{1} {default}has voted for {2}{default}!"
+	}
+	"skipped"
+	{
+		"#format"	"{1:s}"
+		"en"	"{1} {default}has voted to skip!"
+	}
+	"notenoughplayers"
+	{
+		"#format"	"{1:i},{2:i},{3:i}"
+		"en"	"There are not enough players for {1} impostor(s)! ({2}/{3})"
+	}
+	"votingstate_prevoting"
+	{
+		"en"	"Discuss!"
+	}
+	"votingstate_voting"
+	{
+		"en"	"Vote now!"
+	}
+	"startedvote"
+	{
+		"#format"	"{1:s}"
+		"en"	"{1} has started the vote!"
+	}
+	"untilvotingstarts"
+	{
+		"#format"	"{1:i}"
+		"en"	"{1} seconds until voting starts."
+	}
+	"untilvotingends"
+	{
+		"#format"	"{1:i}"
+		"en"	"{1} seconds until voting ends."
+	}
+	"untilejectionends"
+	{
+		"#format"	"{1:i}"
+		"en"	"{1} seconds until ejection ends."
+	}
+	"reason_anonymous"
+	{
+		"#format"	"{1:s}"
+		"en"	"{1} was ejected."
+	}
+	"reason_crewmate"
+	{
+		"#format"	"{1:s}"
+		"en"	"{1} was not an impostor."
+	}
+	"reason_impostor"
+	{
+		"#format"	"{1:s}"
+		"en"	"{1} was an impostor."
+	}
+	"reason_tie"
+	{
+		"en"	"No one was ejected. (Tie)"
+	}
+	"reason_skip"
+	{
+		"en"	"No one was ejected. (Skipped)"
+	}
+	"reason_disconnected"
+	{
+		"en"	"No one was ejected. (Player disconnected)"
+	}
+	"impostorsremain"
+	{
+		"#format"	"{1:i}"
+		"en"	"{1} impostor(s) remain."
+	}
+	"knifedelay"
+	{
+		"#format"	"{1:i}"
+		"en"	"You can use your knife in {1} second."
+	}
+	"knifedelayplural"
+	{
+		"#format"	"{1:i}"
+		"en"	"You can use your knife in {1} seconds."
+	}
+	"dead"
+	{
+		"en"	"You are dead."
+	}
+	"impostor_description"
+	{
+		"en"	"Sabotage and kill everyone."
+	}
+	"ghost_description"
+	{
+		"en"	"Finish your tasks to win!"
+	}
+	"impostorghost_description"
+	{
+		"en"	"You can still sabotage."
+	}
+	"faketasks"
+	{
+		"en"	"Fake Tasks:"
+	}
+	"tasks"
+	{
+		"en"	"Tasks:"
+	}
+	"crewmates_win"
+	{
+		"en"	"Crewmates win!"
+	}
+	"impostors_win"
+	{
+		"en"	"Impostors win!"
+	}
+	"default_win"
+	{
+		"en"	"Nobody wins..."
+	}
+	"ghostreason_killed"
+	{
+		"en"	"You have been killed!"
+	}
+	"ghostreason_suicide"
+	{
+		"en"	"You died on your own!"
+	}
+	"ghostreason_ejected"
+	{
+		"en"	"You have been ejected!"
+	}
+	"ghostreason_generic"
+	{
+		"en"	"You have been voted out!"
+	}
+}
