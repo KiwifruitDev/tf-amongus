@@ -223,4 +223,12 @@
 	{
 		"en"	"You have been voted out!"
 	}
+	"cantjoinnow"
+	{
+		"en"	"You must wait until the end of the round to be spawned!"
+	}
+	"shh"
+	{
+		"en"	"All players have been muted from this point on! Shh..."
+	}
 }
