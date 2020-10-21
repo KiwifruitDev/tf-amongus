@@ -13,7 +13,6 @@ This gamemode has yet to be fully released and is currently in early testing.
 [TF2Items Give Weapon](https://forums.alliedmods.net/showthread.php?t=141962)
 
 ## References
-
 [Sort Numbers](https://forums.alliedmods.net/showthread.php?t=187237) (References code for sorting votes)
 
 [Sapper Immunity](https://forums.alliedmods.net/showthread.php?p=1329948) (Sapper functionality)
@@ -22,7 +21,11 @@ This gamemode has yet to be fully released and is currently in early testing.
 
 [Show fog to a specific client](https://forums.alliedmods.net/showthread.php?t=205788) (not yet implemented but will be used for fog if enabled by server)
 
+[TF2 Events Need Help](https://forums.alliedmods.net/showpost.php?p=862230&postcount=6) (Used to detect TF2 round state)
+
 ## Credits
 [TeamPopplio](https://github.com/TeamPopplio/) (Main development)
 
 [IceboundCat6](https://www.reddit.com/user/IceboundCat6) (Original idea on [Reddit](https://www.reddit.com/r/tf2/comments/j7gznz/tf2_among_us_gamemode_idea/))
+
+[puntero](https://github.com/punteroo) (Reviewed code for necessary changes)

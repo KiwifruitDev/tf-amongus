@@ -37,17 +37,8 @@ Lead Development - MouseDroidPoW
 
 #define MAJOR_REVISION "0"
 #define MINOR_REVISION "1"
-#define STABLE_REVISION "5"
+#define STABLE_REVISION "6"
 #define PLUGIN_VERSION MAJOR_REVISION..."."...MINOR_REVISION..."."...STABLE_REVISION
-
-public Plugin myinfo =
-{
-	name = "[TF2] Among Us",
-	author = "TeamPopplio, IceboundCat6",
-	description = "Among Us in TF2!",
-	version = PLUGIN_VERSION,
-	url = "https://github.com/TeamPopplio/tf-amongus"
-};
 
 enum PlayerState
 {
@@ -99,9 +90,18 @@ enum GhostReason
 	GhostReason_Generic //the player has been killed but the map is not tfau_theskeld
 };
 
+enum RoundStart
+{
+	RoundStart_Ongoing = 0, //round isn't starting anymore; deny microphone/chat
+	RoundStart_Starting, //round is starting; allow microphone/chat
+	RoundStart_Ended, //round has ended; allow microphone/chat
+	RoundStart_NotEnoughPlayers //not enough players to start; allow microphone/chat
+};
+
 Reason currentMeeting = Reason_NoMeeting;
 PlayerState playerState[MAXPLAYERS +1];
 VotingState g_votingState = VotingState_NoVote;
+RoundStart startOfRound = RoundStart_Ended;
 
 char voteAnnouncer[MAX_NAME_LENGTH];
 
@@ -110,7 +110,6 @@ int g_playerSkin[MAXPLAYERS +1];
 int activeImpostors = 0;
 int voteCounter[MAXPLAYERS +1];
 int alreadyVoted[MAXPLAYERS +1]; //0 or 1 please
-int startOfRound = 1; //0 or 1 please
 int votePlayerCorelation[MAXPLAYERS +1]; //reverse: key = vote id, value = user id
 int voteStorage[MAXPLAYERS +2]; //plus 1 extra because last slot will be used for skip
 int firstVote; //used for ejection
@@ -129,7 +128,24 @@ ConVar votingCount;
 ConVar ejectionCount;
 ConVar anonymousEjection;
 
+ConVar friendlyFire;
+ConVar unbalanceLimit;
+ConVar forceAutoTeam;
+ConVar autoTeamBalance;
+ConVar allowSpectators;
+ConVar restartGame;
+ConVar voiceEnable;
+
 ArrayList g_aSpawnPoints;
+
+public Plugin myinfo =
+{
+	name = "[TF2] Among Us",
+	author = "TeamPopplio, IceboundCat6",
+	description = "Among Us in TF2!",
+	version = PLUGIN_VERSION,
+	url = "https://github.com/TeamPopplio/tf-amongus"
+};
 
 public void OnMapStart()
 {
@@ -144,7 +160,7 @@ public void OnMapStart()
 public OnConfigsExecuted()
 {
 	char gameDesc[64];
-	Format(gameDesc, sizeof(gameDesc), "Among Us (%s)", PLUGIN_VERSION);
+	Format(gameDesc, sizeof(gameDesc), "Among Us v%s", PLUGIN_VERSION);
 	Steam_SetGameDescription(gameDesc);
 }
 
@@ -160,7 +176,7 @@ public void OnPluginStart()
 	// --- Commands
 
 	versionCvar = CreateConVar("sm_amongus_version", PLUGIN_VERSION, "Among Us version - do not modify!", FCVAR_REPLICATED|FCVAR_NOTIFY|FCVAR_SPONLY|FCVAR_DONTRECORD);
-	requiredToStart = CreateConVar("sm_amongus_requiredtostart", "2", "Sets the amount of players required to start the game.");
+	requiredToStart = CreateConVar("sm_amongus_requiredtostart", "3", "Sets the amount of players required to start the game.");
 	impostorCount = CreateConVar("sm_amongus_impostorcount", "1", "Sets the amount of impostors that can be applied in a single game.");
 	knifeConVarCount = CreateConVar("sm_amongus_knifecount", "20", "Sets how many seconds an impostor should wait before being able to use their knife.");
 	preVotingCount = CreateConVar("sm_amongus_prevotingtimer", "30", "Sets how many seconds a vote should wait before starting.");
@@ -168,7 +184,16 @@ public void OnPluginStart()
 	ejectionCount = CreateConVar("sm_amongus_ejectiontimer", "10", "Sets how many seconds ejection should last.");
 	anonymousEjection = CreateConVar("sm_amongus_anonymousejection", "0", "Enable (1) or disable (0) anonymous ejection.");
 
-	RegAdminCmd("sm_amongus_becomeimpostor", Command_BecomeImpostor, ADMFLAG_SLAY|ADMFLAG_CHEATS, "sm_becomeimpostor <#userid|name>");
+	friendlyFire = FindConVar("mp_friendlyfire");
+	unbalanceLimit = FindConVar("mp_teams_unbalance_limit");
+	forceAutoTeam = FindConVar("mp_forceautoteam");
+	autoTeamBalance = FindConVar("mp_autoteambalance");
+	allowSpectators = FindConVar("mp_allowspectators");
+	restartGame = FindConVar("mp_restartgame");
+	voiceEnable = FindConVar("sv_voiceenable");
+
+	RegAdminCmd("sm_amongus_becomeimpostor", Command_BecomeImpostor, ADMFLAG_SLAY|ADMFLAG_CHEATS, "sm_amongus_becomeimpostor <#userid|name>");
+	RegAdminCmd("sm_amongus_restart", Command_Restart, ADMFLAG_SLAY|ADMFLAG_CHEATS, "sm_amongus_restart <crewmates|impostors|nobody>");
 
 	// --- Hooks
 
@@ -194,8 +219,13 @@ public void OnPluginStart()
 
 	// --- Misc.
 
-	ServerCommand("mp_friendlyfire 1");
-	ServerCommand("mp_allowspectators 0");
+	SetConVarBool(friendlyFire,true);
+	SetConVarBool(unbalanceLimit,false);
+	SetConVarBool(forceAutoTeam,false);
+	SetConVarBool(autoTeamBalance,false);
+	SetConVarBool(allowSpectators,false);
+	SetConVarBool(voiceEnable,true);
+
 	AutoExecConfig(true, "AmongUs");
 	GetConVarString(versionCvar, oldVersion, sizeof(oldVersion));
 	if(strcmp(oldVersion, PLUGIN_VERSION, false))
@@ -248,6 +278,7 @@ public Action Listener_Voice(client, const String:command[], argc)
 public Action Event_PlayerDisconnect(Handle:event, String:name[], bool:dontBroadcast)
 {
 	new client = GetClientOfUserId(GetEventInt(event, "userid"));
+	persistentUITimer[client] = null;
 	if(TF2_GetClientTeam(client) == TFTeam_Spectator)
 		return Plugin_Continue;
 	if(playerState[client] == State_Impostor)
@@ -263,7 +294,7 @@ public Action Event_PlayerDisconnect(Handle:event, String:name[], bool:dontBroad
 //chat when appropriate
 public Action Listener_Chat(client, const String:command[], argc)
 {
-	if(startOfRound >= 1)
+	if(startOfRound != RoundStart_Ongoing)
 		return Plugin_Continue;
 	if(g_votingState == VotingState_NoVote || g_votingState == VotingState_Ejection)
 		return Plugin_Handled;
@@ -321,51 +352,42 @@ public Action Listener_Chat(client, const String:command[], argc)
 	return Plugin_Handled;
 }
 
-//require team red or spectator
-public Action Event_TeamChanged(Handle hEvent, char[] strEventName, bool bDontBroadcast)
+stock int GetTFTeamCount(TFTeam tfteam)
 {
-	int team = GetEventInt(hEvent, "team");
-	PrintToChatAll("%d",team);
-	PrintToChatAll("a%d",view_as<int>(TFTeam_Red));
-	if(team != view_as<int>(TFTeam_Red))
+	int numbert = 0;
+	for (new i=1; i<=MaxClients; i++)
 	{
-		return Plugin_Handled;
+		if(IsValidClient(i))
+		{
+			if (TF2_GetClientTeam(i) == tfteam) 
+				numbert++;
+		}
 	}
-	return Plugin_Continue;
-}
+	return numbert;
+} 
 
 //set player to spy upon spawn
 public Action OnPlayerSpawn(Handle hEvent, char[] strEventName, bool bDontBroadcast)
 {
 	int iClient = GetClientOfUserId(GetEventInt(hEvent, "userid"));
 	if (!IsValidClient(iClient)) return Plugin_Handled;
-	if(startOfRound <= 1)
+	if(startOfRound == RoundStart_Ended || startOfRound == RoundStart_NotEnoughPlayers || GetTFTeamCount(TFTeam_Red) <= requiredToStart.IntValue || g_knifeCount[iClient] == -3)
 	{
 		TF2_ChangeClientTeam(iClient,TFTeam_Red);
 		TF2_SetPlayerClass(iClient, TFClass_Spy, false, true);
+		TF2_RegeneratePlayer(iClient);
 		TF2_RemoveWeaponSlot(iClient,0); //revolver
-		//notably absent: sapper at slot 1, see below
 		TF2_RemoveWeaponSlot(iClient,3); //disguise kit?
 		TF2_RemoveWeaponSlot(iClient,4); //why are
 		TF2_RemoveWeaponSlot(iClient,5); //there seven
 		TF2_RemoveWeaponSlot(iClient,6); //weapon slots
 	}
-	else if(startOfRound == 2 && GetTeamClientCount(view_as<int>(TFTeam_Blue))+GetTeamClientCount(view_as<int>(TFTeam_Red))+GetTeamClientCount(view_as<int>(TFTeam_Spectator)) >= requiredToStart.IntValue)
-	{
+	else if(startOfRound == RoundStart_NotEnoughPlayers && GetClientCount(true) >= requiredToStart.IntValue)
 		RoundWon(State_Ghost);
-	}
-	else if(GetTeamClientCount(view_as<int>(TFTeam_Blue))+GetTeamClientCount(view_as<int>(TFTeam_Red))+GetTeamClientCount(view_as<int>(TFTeam_Spectator)) >= requiredToStart.IntValue)
+	else
 	{
-		return Plugin_Handled;
-	}
-	else //??? this fixed something wrong and I really don't know what to say
-	{
-		TF2_RemoveWeaponSlot(iClient,0); //revolver
-		//TF2_RemoveWeaponSlot(iClient,2); //knife
-		TF2_RemoveWeaponSlot(iClient,3); //disguise kit?
-		TF2_RemoveWeaponSlot(iClient,4); //why are
-		TF2_RemoveWeaponSlot(iClient,5); //there seven
-		TF2_RemoveWeaponSlot(iClient,6); //weapon slots
+		TF2_ChangeClientTeam(iClient,TFTeam_Spectator);
+		PrintToChat(iClient,"%t","ongoing");
 	}
 	return Plugin_Handled;
 }
@@ -439,7 +461,7 @@ public void DrawVotingPanels(client)
 
 public void StartMeeting(int announcer, Reason reason, int skinOfBody)
 {
-	ServerCommand("sv_voiceenable 1");
+	SetConVarBool(voiceEnable,true);
 	currentMeeting = reason;
 	if(g_votingState != VotingState_NoVote)
 		return;
@@ -545,7 +567,7 @@ public Action VoteTimer(Handle timer)
 				}
 			}
 			voteStorage[MAXPLAYERS+1] = 0; //clear skip votes
-			ServerCommand("sv_voiceenable 0");
+			SetConVarBool(voiceEnable,false);
 			CreateTimer(ejectionCount.FloatValue, VoteTimer); //I don't feel so good...
 		}
 		case VotingState_Ejection:
@@ -579,21 +601,8 @@ public Action VoteTimer(Handle timer)
 
 }
 
-stock GetRealClientCount() {
-	new iClients = 0;
-
-	for (new i = 1; i <= MaxClients; i++) {
-		if (IsValidClient(i)) {
-			iClients++;
-		}
-	}
-
-	return iClients;
-} 
-
 public Action GameStart(Handle event, char[] name, bool:Broadcast) {
-	ServerCommand("sv_voiceenable 1");
-	startOfRound = 1;
+	startOfRound = RoundStart_Starting;
 	g_hWeaponEquip = EndPrepSDKCall();
 	if (!g_hWeaponEquip)
 	{
@@ -614,17 +623,23 @@ public Action GameStart(Handle event, char[] name, bool:Broadcast) {
 	}
 	//find out who is the impostor if there are enough players
 	//this is bad code
-	if(GetTeamClientCount(view_as<int>(TFTeam_Blue))+GetTeamClientCount(view_as<int>(TFTeam_Red))+GetTeamClientCount(view_as<int>(TFTeam_Spectator)) >= requiredToStart.IntValue)
+	if(GetClientCount(true) >= requiredToStart.IntValue)
 	{
 		int iSkin = 0; //0 - 11
 		for(new Client = 1; Client <= MaxClients; Client++)
 		{
 			if(IsValidClient(Client))
 			{
+				g_knifeCount[Client] = -3; //crewmates shouldn't have a knife count
+				SetClientListeningFlags(Client, VOICE_NORMAL);
 				TF2_ChangeClientTeam(Client,TFTeam_Red);
 				TF2_SetPlayerClass(Client, TFClass_Spy, false, true);
+				TF2_RemoveWeaponSlot(Client,0); //revolver
+				TF2_RemoveWeaponSlot(Client,3); //disguise kit?
+				TF2_RemoveWeaponSlot(Client,4); //why are
+				TF2_RemoveWeaponSlot(Client,5); //there seven
+				TF2_RemoveWeaponSlot(Client,6); //weapon slots
 				EmitSoundToClient(Client, SPAWN_SOUND);
-				g_knifeCount[Client] = -1; //crewmates shouldn't have a knife count
 				PrintCenterText(Client,"%t","state_crewmate");
 				voteStorage[Client] = 0;
 				playerState[Client] = State_Crewmate;
@@ -669,7 +684,6 @@ public Action GameStart(Handle event, char[] name, bool:Broadcast) {
 			while(!IsClientInGame(randomClient) || TF2_GetClientTeam(randomClient) != TFTeam_Red || playerState[randomClient] == State_Impostor);
 			playerState[randomClient] = State_Impostor;
 			PrintCenterText(randomClient,"%t","state_impostor");
-			g_knifeCount[randomClient] = knifeConVarCount.IntValue;
 			int glow = TF2_AttachBasicGlow(randomClient, TFTeam_Red); //impostors get a nice glow effect
 			SetEntityRenderColor(glow, 255, 0, 0, 0);
 			SDKHook(glow,SDKHook_SetTransmit,Hook_SetTransmitImpostor);
@@ -678,16 +692,29 @@ public Action GameStart(Handle event, char[] name, bool:Broadcast) {
 	}
 	else
 	{
-		startOfRound = 2;
-		PrintCenterTextAll("%t","notenoughplayers",impostorCount.IntValue,GetTeamClientCount(view_as<int>(TFTeam_Red)),requiredToStart.IntValue);
+		startOfRound = RoundStart_NotEnoughPlayers;
+		PrintCenterTextAll("%t","notenoughplayers",impostorCount.IntValue,GetClientCount(true),requiredToStart.IntValue);
 	}
 }
 
 public Action TransitionToRoundStart(Handle timer, int userid)
 {
 	PrintToChatAll("%t","shh");
-	ServerCommand("sv_voiceenable 0");
-	startOfRound = 0;
+	for(new client = 1; client <= MaxClients; client++)
+	{
+		if(IsValidClient(client))
+		{
+			SetClientListeningFlags(client, VOICE_MUTED);
+			switch(playerState[client])
+			{
+				case State_Impostor:
+					g_knifeCount[client] = knifeConVarCount.IntValue;
+				default:
+					g_knifeCount[client] = -1;
+			}
+		}
+	}
+	startOfRound = RoundStart_Ongoing;
 }
 
 stock bool IsValidClient(int iClient, bool bAlive = false)
@@ -712,7 +739,9 @@ public Action Listener_Death(client, const String:command[], argc)
 public Action UITimer(Handle timer, int userid)
 {
 	int client = GetClientOfUserId(userid);
-	if (!IsValidClient(client) || g_votingState == VotingState_EndOfRound)
+	// https://forums.alliedmods.net/showpost.php?p=862230&postcount=6
+	int stateOffset = FindSendPropInfo("CTeamplayRoundBasedRulesProxy", "m_iRoundState");
+	if (!IsValidClient(client) || g_votingState == VotingState_EndOfRound || stateOffset == 6 || stateOffset == 8 || (g_knifeCount[client] == -3 && g_votingState == VotingState_EndOfRound))
 	{
 		persistentUITimer[client] = null;
 		return Plugin_Stop;
@@ -812,7 +841,7 @@ public Action OnTakeDamage(client, &attacker, &inflictor, &Float:damage, &damage
 	}
 	new Float:vOrigin[3];
 	float seqAngles[3];
-	if(playerState[client] != State_Ghost || playerState[client] != State_ImpostorGhost)
+	if(playerState[client] == State_Crewmate)
 	{
 		new ent = CreateEntityByName("prop_dynamic_override"); //spawning a prop that is just the spy laying down
 		DispatchKeyValue(ent, "targetname", "deadbody");
@@ -832,7 +861,7 @@ public Action OnTakeDamage(client, &attacker, &inflictor, &Float:damage, &damage
 			TeleportEntity(attacker, vNewOrigin, NULL_VECTOR, NULL_VECTOR);
 			DispatchSpawn(ent);
 		}
-
+		playerState[client] = State_Ghost;
 		if(IsValidClient(attacker))
 		{
 			EmitSoundToClient(attacker, KILL_SOUND);
@@ -841,8 +870,7 @@ public Action OnTakeDamage(client, &attacker, &inflictor, &Float:damage, &damage
 		}
 		else
 			ApplyGhostEffect(client, GhostReason_Suicide);
-		PrintToChatAll("%d",GetNonGhostTeamCount(TFTeam_Red)-activeImpostors);
-		if(GetNonGhostTeamCount(TFTeam_Red)-activeImpostors <= 2)
+		if(GetNonGhostTeamCount(TFTeam_Red)-activeImpostors <= 1)
 			RoundWon(State_Impostor);
 	}
 	return Plugin_Handled;
@@ -874,8 +902,7 @@ public Action Hook_SetTransmit(entity, client)
 
 public void RoundWon(PlayerState winners)
 {
-	ServerCommand("sv_voiceenable 1");
-	startOfRound = 1;
+	startOfRound = RoundStart_Ended;
 	g_votingState = VotingState_EndOfRound;
 	new iEnt = -1;
 	iEnt = FindEntityByClassname(iEnt, "game_round_win");
@@ -899,9 +926,16 @@ public void RoundWon(PlayerState winners)
 		}
 		default:
 		{
-			ServerCommand("mp_restartgame 5");
+			SetConVarInt(restartGame,5);
 			PrintCenterTextAll("%t","default_win");
 			return;
+		}
+	}
+	for(new Client = 1; Client <= MaxClients; Client++)
+	{
+		if(IsValidClient(Client) && TF2_GetClientTeam(Client) == TFTeam_Red)
+		{
+			g_knifeCount[Client] = -3;
 		}
 	}
 	DispatchKeyValue(iEnt,"force_map_reset","1");
@@ -923,26 +957,37 @@ stock int GetNonGhostTeamCount(TFTeam team)
 	return number;
 } 
 
-stock int GetTFTeamCount(TFTeam tfteam)
-{
-	int numbert = 0;
-	for (new i=1; i<=MaxClients; i++)
-	{
-		if(IsValidClient(i))
-		{
-			if (TF2_GetClientTeam(i) == tfteam) 
-				numbert++;
-		}
-	}
-	return numbert;
-} 
-
 //for debugging purposes
+public Action Command_Restart(int client, int args)
+{
+	if (args < 1)
+	{
+		ReplyToCommand(client, "[SM] Usage: sm_amongus_restart <crewmates|impostors|nobody>");
+		return Plugin_Handled;
+	}
+
+	char arg[65];
+	GetCmdArg(1, arg, sizeof(arg));
+
+	if(StrEqual(arg,"crewmates"))
+		RoundWon(State_Crewmate);
+	else if(StrEqual(arg, "impostors"))
+		RoundWon(State_Impostor);
+	else if(StrEqual(arg,"nobody"))
+		RoundWon(State_Ghost);
+	else
+	{
+		ReplyToCommand(client, "[SM] Usage: sm_amongus_restart <crewmates|impostors|nobody>");
+		return Plugin_Handled;
+	}
+	return Plugin_Handled;
+}
+
 public Action Command_BecomeImpostor(int client, int args)
 {
 	if (args < 1)
 	{
-		ReplyToCommand(client, "[SM] Usage: sm_becomeimpostor <#userid|name>");
+		ReplyToCommand(client, "[SM] Usage: sm_amongus_becomeimpostor <#userid|name>");
 		return Plugin_Handled;
 	}
 

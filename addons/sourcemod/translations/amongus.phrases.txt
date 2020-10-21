@@ -231,4 +231,8 @@
 	{
 		"en"	"All players have been muted from this point on! Shh..."
 	}
+	"ongoing"
+	{
+		"en"	"You can't join right now! The round is ongoing."
+	}
 }
