@@ -8,6 +8,8 @@ ambitous project for myself and others.
 
 Original Concept - IceboundCat6
 Lead Development - MouseDroidPoW
+SourcePawn Help - puntero
+
 
 (Feel free to add your name here)
 -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
@@ -19,7 +21,6 @@ Lead Development - MouseDroidPoW
 #include <morecolors>
 #include <sdkhooks>
 #include <tf2items>
-#include <tf2items_giveweapon>
 #include <stocksoup/entity_prefabs>
 #include <steamtools> //should we still undef extensions? no documentation...
 
@@ -37,7 +38,7 @@ Lead Development - MouseDroidPoW
 
 #define MAJOR_REVISION "0"
 #define MINOR_REVISION "1"
-#define STABLE_REVISION "6"
+#define STABLE_REVISION "7"
 #define PLUGIN_VERSION MAJOR_REVISION..."."...MINOR_REVISION..."."...STABLE_REVISION
 
 enum PlayerState
@@ -578,21 +579,21 @@ public Action VoteTimer(Handle timer)
 			{
 				if(IsValidClient(i))
 				{
-					if(playerState[i] == State_Impostor)
-						g_knifeCount[i] = knifeConVarCount.IntValue;
 					switch(playerState[i])
 					{
+						case State_Impostor:
+							g_knifeCount[i] = knifeConVarCount.IntValue;
 						case State_Ghost:
-							SetEntityMoveType(firstVote, MOVETYPE_NOCLIP);
+							SetEntityMoveType(i, MOVETYPE_NOCLIP);
 						case State_ImpostorGhost:
-							SetEntityMoveType(firstVote, MOVETYPE_NOCLIP);
+							SetEntityMoveType(i, MOVETYPE_NOCLIP);
 						default:
 							SetEntityMoveType(i, MOVETYPE_WALK);
 					}
 					voteCounter[i] = 0;
 				}
 			}
-			if(GetNonGhostTeamCount(TFTeam_Red)-activeImpostors <= 2)
+			if(GetNonGhostTeamCount(TFTeam_Red)-activeImpostors <= 1)
 				RoundWon(State_Impostor);
 			else if(activeImpostors == 0)
 				RoundWon(State_Crewmate);
@@ -626,10 +627,12 @@ public Action GameStart(Handle event, char[] name, bool:Broadcast) {
 	if(GetClientCount(true) >= requiredToStart.IntValue)
 	{
 		int iSkin = 0; //0 - 11
+		char iSkinName[MAX_NAME_LENGTH];
 		for(new Client = 1; Client <= MaxClients; Client++)
 		{
 			if(IsValidClient(Client))
 			{
+				SkinSwitch(Client, Skin_Name, iSkinName);
 				g_knifeCount[Client] = -3; //crewmates shouldn't have a knife count
 				SetClientListeningFlags(Client, VOICE_NORMAL);
 				TF2_ChangeClientTeam(Client,TFTeam_Red);
@@ -640,7 +643,7 @@ public Action GameStart(Handle event, char[] name, bool:Broadcast) {
 				TF2_RemoveWeaponSlot(Client,5); //there seven
 				TF2_RemoveWeaponSlot(Client,6); //weapon slots
 				EmitSoundToClient(Client, SPAWN_SOUND);
-				PrintCenterText(Client,"%t","state_crewmate");
+				PrintCenterText(Client,"%t (%s)","state_crewmate",iSkinName);
 				voteStorage[Client] = 0;
 				playerState[Client] = State_Crewmate;
 				SDKUnhook(Client, SDKHook_OnTakeDamage, OnTakeDamage);
@@ -682,8 +685,9 @@ public Action GameStart(Handle event, char[] name, bool:Broadcast) {
 				randomClient = GetRandomInt(1, MaxClients); //absolutely sucks
 			}
 			while(!IsClientInGame(randomClient) || TF2_GetClientTeam(randomClient) != TFTeam_Red || playerState[randomClient] == State_Impostor);
+			SkinSwitch(randomClient, Skin_Name, iSkinName);
 			playerState[randomClient] = State_Impostor;
-			PrintCenterText(randomClient,"%t","state_impostor");
+			PrintCenterText(randomClient,"%t (%s)","state_impostor",iSkinName);
 			int glow = TF2_AttachBasicGlow(randomClient, TFTeam_Red); //impostors get a nice glow effect
 			SetEntityRenderColor(glow, 255, 0, 0, 0);
 			SDKHook(glow,SDKHook_SetTransmit,Hook_SetTransmitImpostor);
@@ -803,9 +807,9 @@ public Action UITimer(Handle timer, int userid)
 				case (State_Impostor):
 				{
 					SetHudTextParams(0.15, 0.15, 3.0, 255, 0, 0, 255, 1, 6.0, 0.1, 0.1);
-					if (g_knifeCount[client] > 1)
+					if (g_knifeCount[client] > 1 || g_knifeCount[client] == 0)
 						ShowSyncHudText(client, g_hHud, "%t\n%t\n%t","knifedelayplural",g_knifeCount[client],"impostor_description","faketasks");
-					else if (g_knifeCount[client] > 0)
+					else if (g_knifeCount[client] >= 0)
 						ShowSyncHudText(client, g_hHud, "%t\n%t\n%t","knifedelay",g_knifeCount[client],"impostor_description","faketasks");
 					else
 						ShowSyncHudText(client, g_hHud, "%t\n%t","impostor_description","faketasks");

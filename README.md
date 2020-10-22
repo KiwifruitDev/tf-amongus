@@ -10,8 +10,6 @@ This gamemode has yet to be fully released and is currently in early testing.
 
 [TF2Items](https://builds.limetech.io/?p=tf2items)
 
-[TF2Items Give Weapon](https://forums.alliedmods.net/showthread.php?t=141962)
-
 ## References
 [Sort Numbers](https://forums.alliedmods.net/showthread.php?t=187237) (References code for sorting votes)
 
@@ -19,9 +17,11 @@ This gamemode has yet to be fully released and is currently in early testing.
 
 [Freak Fortess 2](https://forums.alliedmods.net/showthread.php?t=229013) (Version checking, phrases, config generation)
 
-[Show fog to a specific client](https://forums.alliedmods.net/showthread.php?t=205788) (not yet implemented but will be used for fog if enabled by server)
+[Show fog to a specific client](https://forums.alliedmods.net/showthread.php?t=205788) (Will be used for fog if enabled by server)
 
 [TF2 Events Need Help](https://forums.alliedmods.net/showpost.php?p=862230&postcount=6) (Used to detect TF2 round state)
+
+[Map Trigger Condition](https://forums.alliedmods.net/showthread.php?t=257579) (Will be used to detect map triggers)
 
 ## Credits
 [TeamPopplio](https://github.com/TeamPopplio/) (Main development)
