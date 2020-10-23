@@ -44,10 +44,6 @@
 	{
 		"en"	"Orange"
 	}
-	"color_orange"
-	{
-		"en"	"Orange"
-	}
 	"color_pink"
 	{
 		"en"	"Pink"
@@ -234,5 +230,25 @@
 	"ongoing"
 	{
 		"en"	"You can't join right now! The round is ongoing."
+	}
+	"ventstate_insidevent"
+	{
+		"en"	"You are venting."
+	}
+	"ventstate_ontopofvent"
+	{
+		"en"	"Medic! to vent here."
+	}
+	"reportbody"
+	{
+		"en"	"Medic! to report this body."
+	}
+	"emergencybutton"
+	{
+		"en"	"Medic! to call an emergency."
+	}
+	"unmuted"
+	{
+		"en"	"All players have been unmuted during voting. Discuss!"
 	}
 }

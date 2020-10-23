@@ -21,6 +21,7 @@ SourcePawn Help - puntero
 #include <morecolors>
 #include <sdkhooks>
 #include <tf2items>
+#include <customkeyvalues>
 #include <stocksoup/entity_prefabs>
 #include <steamtools> //should we still undef extensions? no documentation...
 
@@ -38,7 +39,7 @@ SourcePawn Help - puntero
 
 #define MAJOR_REVISION "0"
 #define MINOR_REVISION "1"
-#define STABLE_REVISION "7"
+#define STABLE_REVISION "8"
 #define PLUGIN_VERSION MAJOR_REVISION..."."...MINOR_REVISION..."."...STABLE_REVISION
 
 enum PlayerState
@@ -99,13 +100,37 @@ enum RoundStart
 	RoundStart_NotEnoughPlayers //not enough players to start; allow microphone/chat
 };
 
+enum VentState
+{
+	VentState_Crewmate = 0, //player is not allowed to use vents
+	VentState_NoVent, //player is not using vents
+	VentState_OnTopOfVent, //player is on top of a vent
+	VentState_InsideVent //player is inside of a vent
+};
+
+enum EmergencyButtonState
+{
+	Emergency_NotNearButton = 0,
+	Emergency_NextToButton
+};
+
+
 Reason currentMeeting = Reason_NoMeeting;
 PlayerState playerState[MAXPLAYERS +1];
 VotingState g_votingState = VotingState_NoVote;
 RoundStart startOfRound = RoundStart_Ended;
+VentState ventState[MAXPLAYERS +1];
+EmergencyButtonState emergencyButton[MAXPLAYERS +1];
 
 char voteAnnouncer[MAX_NAME_LENGTH];
+char g_ventLocation1Name[MAX_NAME_LENGTH];
+char g_ventLocation2Name[MAX_NAME_LENGTH];
 
+int g_ventDoors[MAXPLAYERS +1] = -1;
+int g_ventLocation1[MAXPLAYERS +1] = -1;
+int g_ventLocation2[MAXPLAYERS +1] = -1;
+
+int emergencyUses[MAXPLAYERS +1];
 int g_knifeCount[MAXPLAYERS +1];
 int g_playerSkin[MAXPLAYERS +1];
 int activeImpostors = 0;
@@ -115,6 +140,8 @@ int votePlayerCorelation[MAXPLAYERS +1]; //reverse: key = vote id, value = user 
 int voteStorage[MAXPLAYERS +2]; //plus 1 extra because last slot will be used for skip
 int firstVote; //used for ejection
 int secondVote; //used to test for a tie
+int iSkin = 0;
+int mapEmergencyButtonId = -1;
 
 Handle g_hHud;
 Handle persistentUITimer[MAXPLAYERS +1]=INVALID_HANDLE;
@@ -128,6 +155,7 @@ ConVar preVotingCount;
 ConVar votingCount;
 ConVar ejectionCount;
 ConVar anonymousEjection;
+ConVar emergencyButtonMaxUses;
 
 ConVar friendlyFire;
 ConVar unbalanceLimit;
@@ -142,7 +170,7 @@ ArrayList g_aSpawnPoints;
 public Plugin myinfo =
 {
 	name = "[TF2] Among Us",
-	author = "TeamPopplio, IceboundCat6",
+	author = "TeamPopplio, IceboundCat6, puntero",
 	description = "Among Us in TF2!",
 	version = PLUGIN_VERSION,
 	url = "https://github.com/TeamPopplio/tf-amongus"
@@ -156,6 +184,25 @@ public void OnMapStart()
 	PrecacheSound(EMERGENCY_SOUND, true);
 	PrecacheSound(KILL_SOUND, true);
 	PrecacheSound(SPAWN_SOUND, true);
+	int ent = -1;
+	if(g_aSpawnPoints == null)
+	{
+		g_aSpawnPoints = new ArrayList();
+		while((ent = FindEntityByClassname(ent, "info_player_teamspawn")) != -1)
+		{
+			g_aSpawnPoints.Push(ent);
+		}
+	}
+	while((ent = FindEntityByClassname(ent, "prop_dynamic")) != -1) //find the emergency button
+	{
+		char targetName[32];
+		GetEntPropString(ent, Prop_Data, "m_iName", targetName, sizeof(targetName));
+		if(StrContains(targetName,"emergency_button") != -1)
+		{
+			mapEmergencyButtonId = ent;
+			break; //this might break anything below this portion of the script... oh well
+		}
+	}
 }
 
 public OnConfigsExecuted()
@@ -163,6 +210,18 @@ public OnConfigsExecuted()
 	char gameDesc[64];
 	Format(gameDesc, sizeof(gameDesc), "Among Us v%s", PLUGIN_VERSION);
 	Steam_SetGameDescription(gameDesc);
+}
+
+public void OnPluginEnd()
+{
+	LogMessage("[TF2] Among Us - Unloading! (v%s)", PLUGIN_VERSION);
+	for(new i = 1; i <= MaxClients; i++)
+	{
+		if(persistentUITimer[i] != INVALID_HANDLE)
+		{
+			KillTimer(persistentUITimer[i],false); //kill timer so changelevel doesn't break the plugin
+		}
+	}
 }
 
 public void OnPluginStart()
@@ -184,6 +243,7 @@ public void OnPluginStart()
 	votingCount = CreateConVar("sm_amongus_votingtimer", "30", "Sets how many seconds a vote should last before ejection.");
 	ejectionCount = CreateConVar("sm_amongus_ejectiontimer", "10", "Sets how many seconds ejection should last.");
 	anonymousEjection = CreateConVar("sm_amongus_anonymousejection", "0", "Enable (1) or disable (0) anonymous ejection.");
+	emergencyButtonMaxUses = CreateConVar("sm_amongus_maxemergencies", "2", "Sets the maximum amount of emergencies a single player can call.");
 
 	friendlyFire = FindConVar("mp_friendlyfire");
 	unbalanceLimit = FindConVar("mp_teams_unbalance_limit");
@@ -203,6 +263,9 @@ public void OnPluginStart()
 	HookEvent("player_disconnect", Event_PlayerDisconnect, EventHookMode_Post);
 	HookEvent("player_sapped_object", Event_Sapped, EventHookMode_Post);
 
+	HookEntityOutput("trigger_multiple", "OnStartTouch", OnTriggerMultiple);
+	HookEntityOutput("trigger_multiple", "OnEndTouch", OnTriggerMultipleEnd);
+
 	// --- Command Listeners
 
 	AddCommandListener(Listener_Voice, "voicemenu");
@@ -220,6 +283,8 @@ public void OnPluginStart()
 
 	// --- Misc.
 
+	voiceEnable.Flags &= ~FCVAR_NOTIFY; //disable serverwide "Server cvar ... changed to x"
+
 	SetConVarBool(friendlyFire,true);
 	SetConVarBool(unbalanceLimit,false);
 	SetConVarBool(forceAutoTeam,false);
@@ -231,6 +296,134 @@ public void OnPluginStart()
 	GetConVarString(versionCvar, oldVersion, sizeof(oldVersion));
 	if(strcmp(oldVersion, PLUGIN_VERSION, false))
 		PrintToServer("[TF2] Among Us - Your config may be outdated. Back up tf/cfg/sourcemod/AmongUs.cfg and delete it, this plugin will generate a new one that you can then modify to your original values.");
+
+	//adding here for redundancy in case plugin is hotloaded
+	if(g_aSpawnPoints == null)
+	{
+		int ent = -1;
+		g_aSpawnPoints = new ArrayList();
+		while((ent = FindEntityByClassname(ent, "info_player_teamspawn")) != -1)
+		{
+			g_aSpawnPoints.Push(ent);
+		}
+	}
+}
+
+//venting for impostor
+// https://forums.alliedmods.net/showpost.php?p=2258820&postcount=4
+
+public void OnTriggerMultiple(const String:output[], caller, activator, Float:delay) {
+	char targetName[32];
+	GetEntPropString(caller, Prop_Data, "m_iName", targetName, sizeof(targetName));
+	if(StrContains(targetName, "trigger_emergencybutton", false) != -1 && IsValidClient(activator))
+	{
+		if (ventState[activator] != VentState_InsideVent && startOfRound == RoundStart_Ongoing && playerState[activator] != State_Ghost && playerState[activator] != State_ImpostorGhost && TF2_GetClientTeam(activator) == TFTeam_Red)
+		{
+			emergencyButton[activator] = Emergency_NextToButton;
+		}
+	}
+	else if (StrContains(targetName, "vent_", false) != -1 && IsValidClient(activator))
+	{
+		if (ventState[activator] != VentState_Crewmate && TF2_GetClientTeam(activator) == TFTeam_Red)
+		{
+			int ent = -1;
+			char ventDoor[MAX_NAME_LENGTH];
+			char ventLoc1[MAX_NAME_LENGTH];
+			char ventLoc2[MAX_NAME_LENGTH];
+			ventState[activator] = VentState_OnTopOfVent;
+			GetCustomKeyValue(caller, "ventdoor", ventDoor, sizeof(ventDoor));
+			GetCustomKeyValue(caller, "ventlocation1", ventLoc1, sizeof(ventLoc1));
+			GetCustomKeyValue(caller, "ventlocation2", ventLoc2, sizeof(ventLoc2));
+			GetCustomKeyValue(caller, "ventlocation1_name", g_ventLocation1Name[activator], MAX_NAME_LENGTH);
+			GetCustomKeyValue(caller, "ventlocation2_name", g_ventLocation2Name[activator], MAX_NAME_LENGTH);
+			while ((ent = FindEntityByClassname(ent, "func_door")) != -1)
+			{
+				char door[MAX_NAME_LENGTH];
+				GetEntPropString(ent, Prop_Data, "m_iName", door, sizeof(door));
+				if(StrEqual(door,ventDoor))
+					g_ventDoors[activator] = ent;
+			}
+			while ((ent = FindEntityByClassname(ent, "info_teleport_destination")) != -1)
+			{
+				char tele[MAX_NAME_LENGTH];
+				GetEntPropString(ent, Prop_Data, "m_iName", tele, sizeof(tele));
+				if(StrEqual(tele,ventLoc1))
+					g_ventLocation1[activator] = ent;
+				if(StrEqual(tele,ventLoc2))
+					g_ventLocation2[activator] = ent;
+			}
+		}
+	}
+}
+
+public void OnTriggerMultipleEnd(const String:output[], caller, activator, Float:delay) {
+	char targetName[32];
+	GetEntPropString(caller, Prop_Data, "m_iName", targetName, sizeof(targetName));
+	if(StrContains(targetName, "trigger_emergencybutton", false) != -1 && IsValidClient(activator))
+	{
+		emergencyButton[activator] = Emergency_NotNearButton;
+	}
+	else if (StrContains(targetName, "vent_", false) != -1 && IsValidClient(activator))
+	{
+		if (ventState[activator] == VentState_OnTopOfVent && TF2_GetClientTeam(activator) == TFTeam_Red)
+		{
+			ventState[activator] = VentState_NoVent;
+			g_ventDoors[activator] = -1;
+			g_ventLocation1[activator] = -1;
+			g_ventLocation2[activator] = -1;
+		}
+	}
+}
+
+public int VentHandler1 (Menu menu, MenuAction action, int client, int param2)
+{
+	char info[MAX_NAME_LENGTH];
+	menu.GetItem(param2, info, sizeof(info));
+	if (action == MenuAction_Select)
+	{
+		int votedFor = StringToInt(info);
+		float seq1Origin[3];
+		float seq1Angles[3];
+		switch(votedFor)
+		{
+			case 1:
+			{
+				GetEntPropVector(g_ventLocation1[client], Prop_Send, "m_vecOrigin", seq1Origin);
+				GetEntPropVector(g_ventLocation1[client], Prop_Send, "m_angRotation", seq1Angles);
+				TeleportEntity(client,seq1Origin,seq1Angles,NULL_VECTOR);
+			}
+			case 2:
+			{
+				GetEntPropVector(g_ventLocation2[client], Prop_Send, "m_vecOrigin", seq1Origin);
+				GetEntPropVector(g_ventLocation2[client], Prop_Send, "m_angRotation", seq1Angles);
+				TeleportEntity(client,seq1Origin,seq1Angles,NULL_VECTOR);
+			}
+			default:
+			{
+				if(IsValidEntity(g_ventDoors[client]))
+					AcceptEntityInput(g_ventDoors[client], "Open", -1, -1, -1);
+				ventState[client] = VentState_OnTopOfVent;
+				SetEntityMoveType(client, MOVETYPE_WALK);
+			}
+		}
+		return 1;
+	}
+	return 0;
+}
+
+public void DrawVentPanels(client)
+{
+	Menu panel = new Menu(VentHandler1);
+	panel.SetTitle("Vent");
+	panel.AddItem("0", "Leave");
+	panel.AddItem("1", g_ventLocation1Name[client]);
+	if(!StrEqual(g_ventLocation1Name[client],""))
+		panel.AddItem("2", g_ventLocation2Name[client]);
+	panel.ExitButton = false;
+	if(IsValidClient(client) && ventState[client] == VentState_InsideVent)
+	{
+		panel.Display(client,1000);
+	}
 }
 
 //this is just base code for tasks when they get added
@@ -238,41 +431,98 @@ public void OnPluginStart()
 public Action Event_Sapped(Handle:event, const String:name[], bool:dontBroadcast)
 {
 	//ownerid is gonna be an invalid client because it's a map placed entity
-	new sapper = GetEventInt(event, "sapperid");
+	int sapper = GetEventInt(event, "sapperid");
 	if(IsValidEntity(sapper))
 		AcceptEntityInput(sapper, "Kill");
 }
 
+//when players call medic or any other voice commands
 public Action Listener_Voice(client, const String:command[], argc)
 {
 	if(playerState[client] == State_Ghost || playerState[client] == State_ImpostorGhost)
 		return Plugin_Handled;
-
-	int entity = GetClientAimTarget(client, false);
-	char targetname[128];
-	int skin;
-	char classname[MAX_NAME_LENGTH];
-
-	if (IsValidEntity(entity))
+	
+	switch(ventState[client])
 	{
-		GetEntPropString(entity, Prop_Data, "m_iClassname", classname, sizeof(classname));
-		if(StrEqual(classname,"prop_dynamic"))
+		case VentState_OnTopOfVent:
 		{
-			GetEntPropString(entity, Prop_Data, "m_iName", targetname, sizeof(targetname));
-			skin = GetEntProp(entity, Prop_Data, "m_nSkin");
-			if(StrEqual(targetname,"deadbody",true))
+			if(IsValidEntity(g_ventDoors[client]))
+				AcceptEntityInput(g_ventDoors[client], "Open", -1, -1, -1);
+			ventState[client] = VentState_InsideVent;
+			SetEntityMoveType(client, MOVETYPE_NONE);
+		}
+		default:
+		{
+			switch(emergencyButton[client])
 			{
-				if(g_votingState == VotingState_NoVote)
+				case Emergency_NextToButton:
 				{
-					AcceptEntityInput(entity, "ClearParent");
-					AcceptEntityInput(entity, "Kill");
-					StartMeeting(client, Reason_FoundBody, skin);
+					DrawEmergencyPanel(client);
+				}
+				default:
+				{
+					int entity = GetClientAimTarget(client, false);
+					char targetname[128];
+					int skin;
+					char classname[MAX_NAME_LENGTH];
+
+					if (IsValidEntity(entity))
+					{
+						GetEntPropString(entity, Prop_Data, "m_iClassname", classname, sizeof(classname));
+						if(StrEqual(classname,"prop_dynamic"))
+						{
+							GetEntPropString(entity, Prop_Data, "m_iName", targetname, sizeof(targetname));
+							skin = GetEntProp(entity, Prop_Data, "m_nSkin");
+							if(StrEqual(targetname,"deadbody",true))
+							{
+								if(g_votingState == VotingState_NoVote)
+								{
+									AcceptEntityInput(entity, "ClearParent");
+									AcceptEntityInput(entity, "Kill");
+									StartMeeting(client, Reason_FoundBody, skin);
+								}
+							}
+						}
+					}
 				}
 			}
 		}
 	}
-
 	return Plugin_Handled;
+}
+
+//emergency button stuffz
+public void DrawEmergencyPanel(client)
+{
+	Menu panel = new Menu(EmergencyHandler1);
+	char call[MAX_NAME_LENGTH] = "";
+	if(emergencyUses[client] >= 1)
+		Format(call,sizeof(call),"Call emergency meeting (%d remaining)",emergencyUses[client]);
+	else
+		Format(call,sizeof(call),"Can't call an emergency meeting! (%d remaining)",emergencyUses[client]);
+	panel.SetTitle("Emergency Button");
+	panel.AddItem("0", call);
+	panel.ExitButton = true;
+	if(IsValidClient(client))
+	{
+		panel.Display(client,60);
+	}
+}
+
+public int EmergencyHandler1 (Menu menu, MenuAction action, int client, int param2)
+{
+	char info[MAX_NAME_LENGTH];
+	menu.GetItem(param2, info, sizeof(info));
+	if (action == MenuAction_Select && playerState[client] != State_Ghost && playerState[client] != State_ImpostorGhost && ventState[client] != VentState_InsideVent && emergencyButton[client] == Emergency_NextToButton)
+	{
+		SetVariantString("push");
+		if(IsValidEntity(mapEmergencyButtonId))
+			AcceptEntityInput(mapEmergencyButtonId,"SetAnimation");
+		StartMeeting(client, Reason_EmergencyButton, 0);
+		emergencyUses[client]--;
+		return 1;
+	}
+	return 0;
 }
 
 //make sure the round doesn't linger when people leave
@@ -280,15 +530,18 @@ public Action Event_PlayerDisconnect(Handle:event, String:name[], bool:dontBroad
 {
 	new client = GetClientOfUserId(GetEventInt(event, "userid"));
 	persistentUITimer[client] = null;
-	if(TF2_GetClientTeam(client) == TFTeam_Spectator)
-		return Plugin_Continue;
-	if(playerState[client] == State_Impostor)
-		activeImpostors--;
-	if(activeImpostors == 0) //player was last impostor
-		RoundWon(State_Crewmate);
-	else if(GetNonGhostTeamCount(TFTeam_Red)-1 <= 2)
-		RoundWon(State_Impostor);
-		
+	if(IsValidClient)
+	{
+		if(TF2_GetClientTeam(client) == TFTeam_Spectator)
+			return Plugin_Continue;
+		if(playerState[client] == State_Impostor)
+			activeImpostors--;
+		if(activeImpostors == 0) //player was last impostor
+			RoundWon(State_Crewmate);
+		else if(GetNonGhostTeamCount(TFTeam_Red)-1 <= 2)
+			RoundWon(State_Impostor);
+	}
+
 	return Plugin_Handled;
 }
 
@@ -370,29 +623,71 @@ stock int GetTFTeamCount(TFTeam tfteam)
 //set player to spy upon spawn
 public Action OnPlayerSpawn(Handle hEvent, char[] strEventName, bool bDontBroadcast)
 {
-	int iClient = GetClientOfUserId(GetEventInt(hEvent, "userid"));
-	if (!IsValidClient(iClient)) return Plugin_Handled;
-	if(startOfRound == RoundStart_Ended || startOfRound == RoundStart_NotEnoughPlayers || GetTFTeamCount(TFTeam_Red) <= requiredToStart.IntValue || g_knifeCount[iClient] == -3)
+	int Client = GetClientOfUserId(GetEventInt(hEvent, "userid"));
+	char iSkinName[MAX_NAME_LENGTH];
+	if (!IsValidClient(Client)) return Plugin_Handled;
+	if(GetClientCount(true) >= requiredToStart.IntValue && startOfRound == RoundStart_Ended)
+		startOfRound = RoundStart_Starting;
+	if(startOfRound == RoundStart_Starting || GetTFTeamCount(TFTeam_Red) <= requiredToStart.IntValue || g_knifeCount[Client] == -3)
 	{
-		TF2_ChangeClientTeam(iClient,TFTeam_Red);
-		TF2_SetPlayerClass(iClient, TFClass_Spy, false, true);
-		TF2_RegeneratePlayer(iClient);
-		TF2_RemoveWeaponSlot(iClient,0); //revolver
-		TF2_RemoveWeaponSlot(iClient,3); //disguise kit?
-		TF2_RemoveWeaponSlot(iClient,4); //why are
-		TF2_RemoveWeaponSlot(iClient,5); //there seven
-		TF2_RemoveWeaponSlot(iClient,6); //weapon slots
+		TF2_RegeneratePlayer(Client);
+		g_knifeCount[Client] = -3; //crewmates shouldn't have a knife count
+		SetClientListeningFlags(Client, VOICE_MUTED);
+		TF2_ChangeClientTeam(Client,TFTeam_Red);
+		TF2_SetPlayerClass(Client, TFClass_Spy, false, true);
+		TF2_RemoveWeaponSlot(Client,0); //revolver
+		TF2_RemoveWeaponSlot(Client,3); //disguise kit?
+		TF2_RemoveWeaponSlot(Client,4); //why are
+		TF2_RemoveWeaponSlot(Client,5); //there seven
+		TF2_RemoveWeaponSlot(Client,6); //weapon slots
+		EmitSoundToClient(Client, SPAWN_SOUND);
+		voteStorage[Client] = 0;
+		emergencyUses[Client] = emergencyButtonMaxUses.IntValue;
+		ventState[Client] = VentState_Crewmate;
+		playerState[Client] = State_Crewmate;
+		SDKUnhook(Client, SDKHook_OnTakeDamage, OnTakeDamage);
+		SDKUnhook(Client,SDKHook_SetTransmit,Hook_SetTransmitVent);
+		SDKUnhook(Client,SDKHook_SetTransmit,Hook_SetTransmit);
+		SetVariantString(SPY_MODEL); //let's get our custom model in
+		AcceptEntityInput(Client, "SetCustomModel"); //yeah set it in place :)
+		SetEntProp(Client, Prop_Send, "m_bUseClassAnimations", 1); //enable animations otherwise you will be threatened by the living dead
+		SetEntProp(Client, Prop_Send, "m_bForcedSkin", 1); //enable changing the skin
+		SetEntProp(Client, Prop_Send, "m_nForcedSkin", iSkin); //set the skin
+		SkinSwitch(iSkin, Skin_NameWithSkin, iSkinName);
+		PrintCenterText(Client,"%t (%s)","state_crewmate",iSkinName);
+		SetEntityRenderMode(Client, RENDER_TRANSCOLOR); //allow for transparency
+		SetEntityRenderColor(Client, 255, 255, 255, 255); //set as opaque for now, maybe not a good idea this early but meh
+		g_playerSkin[Client] = iSkin;
+		int seq = g_aSpawnPoints.Get(iSkin);
+		if(seq > MaxClients && IsValidEntity(seq))
+		{
+			float seqOrigin[3];
+			float seqAngles[3];
+			GetEntPropVector(seq, Prop_Send, "m_vecOrigin", seqOrigin);
+			GetEntPropVector(seq, Prop_Send, "m_angRotation", seqAngles);
+			TeleportEntity(Client,seqOrigin,seqAngles,NULL_VECTOR); //let's teleport the player to a sequential spawn point
+		}
+		if(iSkin < 11)
+			iSkin++;
+		else
+			iSkin = 0; //we don't want all subsequent colors to be default (red?) if there are more than 32 players, so reset the counter
+		SDKHook(Client, SDKHook_OnTakeDamage, OnTakeDamage);
+		if(persistentUITimer[Client] != INVALID_HANDLE)
+		{
+			KillTimer(persistentUITimer[Client],false); //kill or suffer the pain of eventual near-instant timers
+		}
+		persistentUITimer[Client] = CreateTimer(1.0, UITimer, GetClientUserId(Client), TIMER_REPEAT); //this should be the one and only UI timer for the client, for now
 	}
 	else if(startOfRound == RoundStart_NotEnoughPlayers && GetClientCount(true) >= requiredToStart.IntValue)
 		RoundWon(State_Ghost);
 	else
 	{
-		TF2_ChangeClientTeam(iClient,TFTeam_Spectator);
-		PrintToChat(iClient,"%t","ongoing");
+		TF2_ChangeClientTeam(Client,TFTeam_Spectator);
+		PrintToChat(Client,"%t","ongoing");
 	}
 	return Plugin_Handled;
 }
- 
+
 public int VoteHandler1 (Menu menu, MenuAction action, int param1, int param2)
 {
 	char info[MAX_NAME_LENGTH];
@@ -440,7 +735,7 @@ public void DrawVotingPanels(client)
 			votePlayerCorelation[i+1] = GetClientUserId(i);
 			char name[MAX_NAME_LENGTH];
 			char itemnum[255];
-			IntToString(i+1,itemnum,2); //this is causing some votes to count as "skipped" when they aren't?
+			IntToString(i+1,itemnum,32); //this is causing some votes to count as "skipped" when they aren't?
 			char nameOfBody[MAX_NAME_LENGTH];
 			SkinSwitch(i, Skin_Name, nameOfBody);
 			if((playerState[i] == State_Impostor && playerState[client] == State_Impostor) || (playerState[i] == State_ImpostorGhost && playerState[client] == State_ImpostorGhost))
@@ -468,7 +763,7 @@ public void StartMeeting(int announcer, Reason reason, int skinOfBody)
 		return;
 	if(reason == Reason_NoMeeting)
 		return;
-	int iSkin = 0; //0 - 11
+	iSkin = 0;
 	char nameOfBody[MAX_NAME_LENGTH];
 	SkinSwitch(skinOfBody, Skin_NameWithSkin, nameOfBody);
 	Format(voteAnnouncer,MAX_NAME_LENGTH,"%N",announcer);
@@ -507,6 +802,7 @@ public void StartMeeting(int announcer, Reason reason, int skinOfBody)
 			SetEntityMoveType(Client, MOVETYPE_NONE);
 		}
 	}
+	PrintToChatAll("%t","unmuted");
 	g_votingState = VotingState_PreVoting;
 	CreateTimer(preVotingCount.FloatValue, VoteTimer);
 }
@@ -525,6 +821,7 @@ public Action VoteTimer(Handle timer)
 					DrawVotingPanels(i);
 					SetEntityMoveType(i, MOVETYPE_NONE);
 					voteCounter[i] = votingCount.IntValue;
+					SetClientListeningFlags(i, VOICE_NORMAL);
 				}
 			}
 			CreateTimer(votingCount.FloatValue, VoteTimer); //can we do recursive?
@@ -565,8 +862,10 @@ public Action VoteTimer(Handle timer)
 					voteCounter[i] = ejectionCount.IntValue;
 					alreadyVoted[i] = 0;
 					voteStorage[i] = 0;
+					SetClientListeningFlags(i, VOICE_MUTED);
 				}
 			}
+			PrintToChatAll("%t","shh");
 			voteStorage[MAXPLAYERS+1] = 0; //clear skip votes
 			SetConVarBool(voiceEnable,false);
 			CreateTimer(ejectionCount.FloatValue, VoteTimer); //I don't feel so good...
@@ -582,7 +881,10 @@ public Action VoteTimer(Handle timer)
 					switch(playerState[i])
 					{
 						case State_Impostor:
+						{
 							g_knifeCount[i] = knifeConVarCount.IntValue;
+							SetEntityMoveType(i, MOVETYPE_WALK);
+						}
 						case State_Ghost:
 							SetEntityMoveType(i, MOVETYPE_NOCLIP);
 						case State_ImpostorGhost:
@@ -615,66 +917,17 @@ public Action GameStart(Handle event, char[] name, bool:Broadcast) {
 	currentMeeting = Reason_NoMeeting;
 	g_votingState = VotingState_NoVote;
 	voteStorage[MAXPLAYERS+1] = 0; //clear skip votes
-	//we need to fill this table once more?
-	g_aSpawnPoints = new ArrayList();
-	int ent = -1;
-	while((ent = FindEntityByClassname(ent, "info_player_teamspawn")) != -1)
-	{
-		g_aSpawnPoints.Push(ent);
-	}
 	//find out who is the impostor if there are enough players
 	//this is bad code
 	if(GetClientCount(true) >= requiredToStart.IntValue)
 	{
-		int iSkin = 0; //0 - 11
 		char iSkinName[MAX_NAME_LENGTH];
 		for(new Client = 1; Client <= MaxClients; Client++)
 		{
 			if(IsValidClient(Client))
 			{
-				SkinSwitch(Client, Skin_Name, iSkinName);
-				g_knifeCount[Client] = -3; //crewmates shouldn't have a knife count
-				SetClientListeningFlags(Client, VOICE_NORMAL);
 				TF2_ChangeClientTeam(Client,TFTeam_Red);
-				TF2_SetPlayerClass(Client, TFClass_Spy, false, true);
-				TF2_RemoveWeaponSlot(Client,0); //revolver
-				TF2_RemoveWeaponSlot(Client,3); //disguise kit?
-				TF2_RemoveWeaponSlot(Client,4); //why are
-				TF2_RemoveWeaponSlot(Client,5); //there seven
-				TF2_RemoveWeaponSlot(Client,6); //weapon slots
-				EmitSoundToClient(Client, SPAWN_SOUND);
-				PrintCenterText(Client,"%t (%s)","state_crewmate",iSkinName);
-				voteStorage[Client] = 0;
-				playerState[Client] = State_Crewmate;
-				SDKUnhook(Client, SDKHook_OnTakeDamage, OnTakeDamage);
-				SDKUnhook(Client,SDKHook_SetTransmit,Hook_SetTransmit);
-				SetVariantString(SPY_MODEL); //let's get our custom model in
-				AcceptEntityInput(Client, "SetCustomModel"); //yeah set it in place :)
-				SetEntProp(Client, Prop_Send, "m_bUseClassAnimations", 1); //enable animations otherwise you will be threatened by the living dead
-				SetEntProp(Client, Prop_Send, "m_bForcedSkin", 1); //enable changing the skin
-				SetEntProp(Client, Prop_Send, "m_nForcedSkin", iSkin); //set the skin
-				SetEntityRenderMode(Client, RENDER_TRANSCOLOR); //allow for transparency
-				SetEntityRenderColor(Client, 255, 255, 255, 255); //set as opaque for now, maybe not a good idea this early but meh
-				g_playerSkin[Client] = iSkin;
-				int seq = g_aSpawnPoints.Get(iSkin);
-				if(seq > MaxClients && IsValidEntity(seq))
-				{
-					float seqOrigin[3];
-					float seqAngles[3];
-					GetEntPropVector(seq, Prop_Send, "m_vecOrigin", seqOrigin);
-					GetEntPropVector(seq, Prop_Send, "m_angRotation", seqAngles);
-					TeleportEntity(Client,seqOrigin,seqAngles,NULL_VECTOR); //let's teleport the player to a sequential spawn point
-				}
-				if(iSkin < 11)
-					iSkin++;
-				else
-					iSkin = 0; //we don't want all subsequent colors to be default (red?) if there are more than 32 players, so reset the counter
-				SDKHook(Client, SDKHook_OnTakeDamage, OnTakeDamage);
-				if(persistentUITimer[Client] != INVALID_HANDLE)
-				{
-					KillTimer(persistentUITimer[Client],false); //kill or suffer the pain of eventual near-instant timers
-				}
-				persistentUITimer[Client] = CreateTimer(1.0, UITimer, GetClientUserId(Client), TIMER_REPEAT); //this should be the one and only UI timer for the client, for now
+				TF2_RespawnPlayer(Client);
 			}
 		}
 		for(new Impostor = 1; Impostor <= impostorCount.IntValue; Impostor++)
@@ -686,11 +939,13 @@ public Action GameStart(Handle event, char[] name, bool:Broadcast) {
 			}
 			while(!IsClientInGame(randomClient) || TF2_GetClientTeam(randomClient) != TFTeam_Red || playerState[randomClient] == State_Impostor);
 			SkinSwitch(randomClient, Skin_Name, iSkinName);
+			ventState[randomClient] = VentState_NoVent;
 			playerState[randomClient] = State_Impostor;
 			PrintCenterText(randomClient,"%t (%s)","state_impostor",iSkinName);
 			int glow = TF2_AttachBasicGlow(randomClient, TFTeam_Red); //impostors get a nice glow effect
 			SetEntityRenderColor(glow, 255, 0, 0, 0);
 			SDKHook(glow,SDKHook_SetTransmit,Hook_SetTransmitImpostor);
+			SDKHook(randomClient,SDKHook_SetTransmit,Hook_SetTransmitVent);
 		}
 		CreateTimer(5.0,TransitionToRoundStart);
 	}
@@ -797,22 +1052,59 @@ public Action UITimer(Handle timer, int userid)
 		}
 		default:
 		{
+			int entity = GetClientAimTarget(client, false);
+			char targetname[128];
+			char classname[MAX_NAME_LENGTH];
+			char reportBody[MAX_NAME_LENGTH] = "";
+			char emergency[MAX_NAME_LENGTH] = "";
+			if (IsValidEntity(entity))
+			{
+				GetEntPropString(entity, Prop_Data, "m_iClassname", classname, sizeof(classname));
+				if(StrEqual(classname,"prop_dynamic"))
+				{
+					GetEntPropString(entity, Prop_Data, "m_iName", targetname, sizeof(targetname));
+					if(StrEqual(targetname,"deadbody",true))
+						Format(reportBody,sizeof(reportBody),"%t\n","reportbody");
+					else
+						Format(reportBody,sizeof(reportBody),"");
+				}
+			}
+			switch(emergencyButton[client])
+			{
+				case Emergency_NextToButton:
+					Format(emergency,sizeof(emergency),"%t\n","emergencybutton");
+				default:
+					Format(emergency,sizeof(emergency),"");
+			}
 			switch(playerState[client])
 			{
 				case (State_Crewmate):
 				{
 					SetHudTextParams(0.15, 0.15, 3.0, 255, 255, 255, 255, 1, 6.0, 0.1, 0.1);
-					ShowSyncHudText(client, g_hHud, "%t","tasks");
+					ShowSyncHudText(client, g_hHud, "%s%s%t",emergency,reportBody,"tasks");
 				}
 				case (State_Impostor):
 				{
 					SetHudTextParams(0.15, 0.15, 3.0, 255, 0, 0, 255, 1, 6.0, 0.1, 0.1);
+					char ventHere[MAX_NAME_LENGTH] = "";
+					switch(ventState[client])
+					{
+						case VentState_InsideVent:
+						{
+							DrawVentPanels(client);
+							Format(ventHere,sizeof(ventHere),"%t\n","ventstate_insidevent");
+						}
+						case VentState_OnTopOfVent:
+							Format(ventHere,sizeof(ventHere),"%t\n","ventstate_ontopofvent");
+						default:
+							Format(ventHere,sizeof(ventHere),"");
+					}
 					if (g_knifeCount[client] > 1 || g_knifeCount[client] == 0)
-						ShowSyncHudText(client, g_hHud, "%t\n%t\n%t","knifedelayplural",g_knifeCount[client],"impostor_description","faketasks");
+						ShowSyncHudText(client, g_hHud, "%s%s%s%t\n%t\n%t",emergency,reportBody,ventHere,"knifedelayplural",g_knifeCount[client],"impostor_description","faketasks");
 					else if (g_knifeCount[client] >= 0)
-						ShowSyncHudText(client, g_hHud, "%t\n%t\n%t","knifedelay",g_knifeCount[client],"impostor_description","faketasks");
+						ShowSyncHudText(client, g_hHud, "%s%s%s%t\n%t\n%t",emergency,reportBody,ventHere,"knifedelay",g_knifeCount[client],"impostor_description","faketasks");
 					else
-						ShowSyncHudText(client, g_hHud, "%t\n%t","impostor_description","faketasks");
+						ShowSyncHudText(client, g_hHud, "%s%s%s%t\n%t",emergency,reportBody,ventHere,"impostor_description","faketasks");
 				}
 				case (State_ImpostorGhost):
 				{
@@ -834,13 +1126,11 @@ public Action UITimer(Handle timer, int userid)
 //impostor has hurt someone! (friendly fire must be on)
 public Action OnTakeDamage(client, &attacker, &inflictor, &Float:damage, &damagetype)
 {
-	if(playerState[client] == State_Impostor)
-		return Plugin_Handled;
-	if(g_votingState != VotingState_NoVote)
+	if(playerState[client] == State_Impostor || g_votingState != VotingState_NoVote)
 		return Plugin_Handled;
 	if(IsValidClient(attacker))
 	{
-		if(playerState[attacker] != State_Impostor || g_knifeCount[attacker] > -2)
+		if(playerState[attacker] != State_Impostor || g_knifeCount[attacker] > -2 || ventState[attacker] == VentState_InsideVent)
 			return Plugin_Handled;
 	}
 	new Float:vOrigin[3];
@@ -894,6 +1184,13 @@ public Action Hook_SetTransmitImpostor(entity, client)
 			if(playerState[ent] == State_Impostor || playerState[ent] == State_ImpostorGhost)
 				return Plugin_Continue;
 	}
+	return Plugin_Handled;
+}
+
+public Action Hook_SetTransmitVent(entity, client)
+{
+	if (ventState[entity] != VentState_InsideVent || entity == client)
+		return Plugin_Continue;
 	return Plugin_Handled;
 }
 
@@ -1018,6 +1315,7 @@ public Action Command_BecomeImpostor(int client, int args)
 	for (int i = 0; i < target_count; i++)
 	{
 		LogAction(client, target_list[i], "\"%L\" set \"%L\" as an impostor!", client, target_list[i]);
+		ventState[target_list[i]] = VentState_NoVent;
 		playerState[target_list[i]] = State_Impostor;
 		g_knifeCount[target_list[i]] = 0;
 	}
