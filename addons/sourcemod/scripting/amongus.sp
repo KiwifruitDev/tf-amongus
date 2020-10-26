@@ -39,7 +39,7 @@ SourcePawn Help - puntero
 
 #define MAJOR_REVISION "0"
 #define MINOR_REVISION "1"
-#define STABLE_REVISION "8"
+#define STABLE_REVISION "9"
 #define PLUGIN_VERSION MAJOR_REVISION..."."...MINOR_REVISION..."."...STABLE_REVISION
 
 enum PlayerState
@@ -110,8 +110,8 @@ enum VentState
 
 enum EmergencyButtonState
 {
-	Emergency_NotNearButton = 0,
-	Emergency_NextToButton
+	Emergency_NotNearButton = 0, //player cannot press button
+	Emergency_NextToButton //player can press button
 };
 
 
@@ -167,6 +167,91 @@ ConVar voiceEnable;
 
 ArrayList g_aSpawnPoints;
 
+char resources[][] =
+{
+	//materials
+	"materials/models/amongus/player/spy/eyeball_l.vmt",
+	"materials/models/amongus/player/spy/eyeball_l.vtf",
+	"materials/models/amongus/player/spy/eyeball_r.vmt",
+	"materials/models/amongus/player/spy/eyeball_r.vtf",
+	"materials/models/amongus/player/spy/spy_black.vmt",
+	"materials/models/amongus/player/spy/spy_black.vtf",
+	"materials/models/amongus/player/spy/spy_blue.vmt",
+	"materials/models/amongus/player/spy/spy_blue.vtf",
+	"materials/models/amongus/player/spy/spy_brown.vmt",
+	"materials/models/amongus/player/spy/spy_brown.vtf",
+	"materials/models/amongus/player/spy/spy_cyan.vmt",
+	"materials/models/amongus/player/spy/spy_cyan.vtf",
+	"materials/models/amongus/player/spy/spy_green.vmt",
+	"materials/models/amongus/player/spy/spy_green.vtf",
+	"materials/models/amongus/player/spy/spy_head_black.vmt",
+	"materials/models/amongus/player/spy/spy_head_black.vtf",
+	"materials/models/amongus/player/spy/spy_head_blue.vmt",
+	"materials/models/amongus/player/spy/spy_head_blue.vtf",
+	"materials/models/amongus/player/spy/spy_head_brown.vmt",
+	"materials/models/amongus/player/spy/spy_head_brown.vtf",
+	"materials/models/amongus/player/spy/spy_head_cyan.vmt",
+	"materials/models/amongus/player/spy/spy_head_cyan.vtf",
+	"materials/models/amongus/player/spy/spy_head_green.vmt",
+	"materials/models/amongus/player/spy/spy_head_green.vtf",
+	"materials/models/amongus/player/spy/spy_head_lime.vmt",
+	"materials/models/amongus/player/spy/spy_head_lime.vtf",
+	"materials/models/amongus/player/spy/spy_head_orange.vmt",
+	"materials/models/amongus/player/spy/spy_head_orange.vtf",
+	"materials/models/amongus/player/spy/spy_head_pink.vmt",
+	"materials/models/amongus/player/spy/spy_head_pink.vtf",
+	"materials/models/amongus/player/spy/spy_head_purple.vmt",
+	"materials/models/amongus/player/spy/spy_head_purple.vtf",
+	"materials/models/amongus/player/spy/spy_head_red.vmt",
+	"materials/models/amongus/player/spy/spy_head_red.vtf",
+	"materials/models/amongus/player/spy/spy_head_white.vmt",
+	"materials/models/amongus/player/spy/spy_head_white.vtf",
+	"materials/models/amongus/player/spy/spy_head_yellow.vmt",
+	"materials/models/amongus/player/spy/spy_head_yellow.vtf",
+	"materials/models/amongus/player/spy/spy_lime.vmt",
+	"materials/models/amongus/player/spy/spy_lime.vtf",
+	"materials/models/amongus/player/spy/spy_orange.vmt",
+	"materials/models/amongus/player/spy/spy_orange.vtf",
+	"materials/models/amongus/player/spy/spy_pink.vmt",
+	"materials/models/amongus/player/spy/spy_pink.vtf",
+	"materials/models/amongus/player/spy/spy_purple.vmt",
+	"materials/models/amongus/player/spy/spy_purple.vtf",
+	"materials/models/amongus/player/spy/spy_red.vmt",
+	"materials/models/amongus/player/spy/spy_red.vtf",
+	"materials/models/amongus/player/spy/spy_white.vmt",
+	"materials/models/amongus/player/spy/spy_white.vtf",
+	"materials/models/amongus/player/spy/spy_yellow.vmt",
+	"materials/models/amongus/player/spy/spy_yellow.vtf",
+	"materials/models/prop_dock/emergency_button.vmt",
+	"materials/models/prop_dock/emergency_button.vtf",
+	"materials/models/prop_dock/emergency_button_glass.vmt",
+	"materials/models/prop_dock/emergency_button_glass.vmt",
+	"materials/models/prop_dock/emergency_button2.vmt",
+	"materials/models/prop_dock/emergency_button2.vmt",
+	//audio
+	"sound/amongus/emergencymeeting.mp3",
+	"sound/amongus/foundbody.mp3",
+	"sound/amongus/kill.mp3",
+	"sound/amongus/spawn.mp3",
+	//models
+	"models/amongus/player/spy.dx80.vtx",
+	"models/amongus/player/spy.dx90.vtx",
+	"models/amongus/player/spy.mdl",
+	"models/amongus/player/spy.phy",
+	"models/amongus/player/spy.sw.vtx",
+	"models/amongus/player/spy.vvd",
+	"models/prop_dock/emergency_button01.dx80.vtx",
+	"models/prop_dock/emergency_button01.dx90.vtx",
+	"models/prop_dock/emergency_button01.mdl",
+	"models/prop_dock/emergency_button01.sw.vtx",
+	"models/prop_dock/emergency_button01.vvd",
+	"models/prop_dock/emergency_button02.dx80.vtx",
+	"models/prop_dock/emergency_button02.dx90.vtx",
+	"models/prop_dock/emergency_button02.mdl",
+	"models/prop_dock/emergency_button02.sw.vtx",
+	"models/prop_dock/emergency_button02.vvd"
+};
+
 public Plugin myinfo =
 {
 	name = "[TF2] Among Us",
@@ -185,13 +270,10 @@ public void OnMapStart()
 	PrecacheSound(KILL_SOUND, true);
 	PrecacheSound(SPAWN_SOUND, true);
 	int ent = -1;
-	if(g_aSpawnPoints == null)
+	g_aSpawnPoints = new ArrayList();
+	while((ent = FindEntityByClassname(ent, "info_player_teamspawn")) != -1)
 	{
-		g_aSpawnPoints = new ArrayList();
-		while((ent = FindEntityByClassname(ent, "info_player_teamspawn")) != -1)
-		{
-			g_aSpawnPoints.Push(ent);
-		}
+		g_aSpawnPoints.Push(ent); //set spawn locations in the map
 	}
 	while((ent = FindEntityByClassname(ent, "prop_dynamic")) != -1) //find the emergency button
 	{
@@ -200,9 +282,11 @@ public void OnMapStart()
 		if(StrContains(targetName,"emergency_button") != -1)
 		{
 			mapEmergencyButtonId = ent;
-			break; //this might break anything below this portion of the script... oh well
+			break;
 		}
 	}
+	for(int i = 0;i < sizeof(resources);i++)
+		AddFileToDownloadsTable(resources[i]); //add resources
 }
 
 public OnConfigsExecuted()
