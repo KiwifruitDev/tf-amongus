@@ -1,0 +1,254 @@
+"Phrases"
+{
+	"impostor_prefix"
+	{
+		"es"	"*Impostor*"
+	}
+	"ghost_prefix"
+	{
+		"es"	"(FANTASMA)"
+	}
+	"impostor_votingdiscriminator"
+	{
+		"es"	"(Impostor)"
+	}
+	"color_red"
+	{
+		"es"	"Rojo"
+	}
+	"color_blue"
+	{
+		"es"	"Azul"
+	}
+	"color_black"
+	{
+		"es"	"Negro"
+	}
+	"color_brown"
+	{
+		"es"	"Marron"
+	}
+	"color_cyan"
+	{
+		"es"	"Cian"
+	}
+	"color_green"
+	{
+		"es"	"Verde"
+	}
+	"color_lime"
+	{
+		"es"	"Lima"
+	}
+	"color_orange"
+	{
+		"es"	"Naranja"
+	}
+	"color_pink"
+	{
+		"es"	"Rosa"
+	}
+	"color_purple"
+	{
+		"es" 	"Morado"
+	}
+	"color_white"
+	{
+		"es"	"Blanco"
+	}
+	"color_yellow"
+	{
+		"es"	"Amarillo"
+	}
+	"color_default"
+	{
+		"es"	"alguien"
+	}
+	"reason_foundbody"
+	{
+		"#format"	"{1:s},{2:s}"
+		"es"	"{1} ha encontrado el cadaver de {2}!"
+	}
+	"reason_emergencybutton"
+	{
+		"#format"	"{1:s}"
+		"es"	"{1} ha llamado por unar reunion de emergencia!"
+	}
+	"state_crewmate"
+	{
+		"es"	"Eres un tripulante!"
+	}
+	"state_impostor"
+	{
+		"es"	"Eres un impostor!"
+	}
+	"voted"
+	{
+		"#format"	"{1:s},{2:s}"
+		"es"	"{1} {default}ha votado por {2}{default}!"
+	}
+	"skipped"
+	{
+		"#format"	"{1:s}"
+		"es"	"{1} {default}ha votado para saltear!"
+	}
+	"notenoughplayers"
+	{
+		"#format"	"{1:i},{2:i},{3:i}"
+		"es"	"No hay suficientes jugadores para {1} impostor(es)! ({2}/{3})" 
+	}
+	"votingstate_prevoting"
+	{
+		"es"	"Discute!"
+	}
+	"votingstate_voting"
+	{
+		"es"	"Vota ahora!"
+	}
+	"startedvote"
+	{
+		"#format"	"{1:s}"
+		"es"	"{1} ha empezado una votacion!"
+	}
+	"untilvotingstarts"
+	{
+		"#format"	"{1:i}"
+		"es"	"{1} segundos para que comience la votacion."
+	}
+	"untilvotingends"
+	{
+		"#format"	"{1:i}"
+		"es"	"{1} segundos para que termine la votacion."
+	}
+	"untilejectionends"
+	{
+		"#format"	"{1:i}"
+		"es"	"{1} segundos para que termine la eyeccion."
+	}
+	"reason_anonymous"
+	{
+		"#format"	"{1:s}"
+		"es"	"{1} fue eyectado."
+	}
+	"reason_crewmate"
+	{
+		"#format"	"{1:s}"
+		"es"	"{1} no era un impostor."
+	}
+	"reason_impostor"
+	{
+		"#format"	"{1:s}"
+		"es"	"{1} era un impostor."
+	}
+	"reason_tie"
+	{
+		"es"	"Nadie fue eyectado. (Empate)"
+	}
+	"reason_skip"
+	{
+		"es"	"Nadie fue eyectado. (Salteado)"
+	}
+	"reason_disconnected"
+	{
+		"es"	"Nadie fue eyectado. (Jugador Desconectado)"
+	}
+	"impostorsremain"
+	{
+		"#format"	"{1:i}"
+		"es"	"{1} impostor(es) restantes."
+	}
+	"knifedelay"
+	{
+		"#format"	"{1:i}"
+		"es"	"Puedes usar tu cuchillo en {1} segundo."
+	}
+	"knifedelayplural"
+	{
+		"#format"	"{1:i}"
+		"es"	"Puedes usar tu cuchillo en {1} segundos."
+	}
+	"dead"
+	{
+		"es"	"Estas muerto."
+	}
+	"impostor_description"
+	{
+		"es"	"Sabotea y mata a todos."
+	}
+	"ghost_description"
+	{
+		"es"	"Termina tus tareas para ganar!"
+	}
+	"impostorghost_description"
+	{
+		"es"	"Aun puedes sabotear."
+	}
+	"faketasks"
+	{
+		"es"	"Tareas Falsas:"
+	}
+	"tasks"
+	{
+		"es"	"Tareas:"
+	}
+	"crewmates_win"
+	{
+		"es"	"Ganan los tripulantes!"
+	}
+	"impostors_win"
+	{
+		"es"	"Ganan los impostores!"
+	}
+	"default_win"
+	{
+		"es"	"Nadie gano..."
+	}
+	"ghostreason_killed"
+	{
+		"es"	"Has sido asesinado!"
+	}
+	"ghostreason_suicide"
+	{
+		"es"	"Has muerto por tu cuenta!"
+	}
+	"ghostreason_ejected"
+	{
+		"es"	"Has sido eyectado!"
+	}
+	"ghostreason_generic"
+	{
+		"es"	"Has sido votado fuera!"
+	}
+	"cantjoinnow"
+	{
+		"es"	"Debes esperar al final de la ronda para reaparecer!"
+	}
+	"shh"
+	{
+		"es"	"Todos los jugadores han sido muteados a partir de este momento! Shh..."
+	}
+	"ongoing"
+	{
+		"es"	"No puedes unirte ahora mismo! Hay una ronda en curso."
+	}
+	"ventstate_insidevent"
+	{
+		"es"	"Estas ventilando."
+	}
+	"ventstate_ontopofvent"
+	{
+		"es"	"Medico! para ventilar aca."
+	}
+	"reportbody"
+	{
+		"es"	"Medico! reportar este cuerpo."
+	}
+	"emergencybutton"
+	{
+		"es"	"Medico! llamar una emergencia."
+	}
+	"unmuted"
+	{
+		"es"	"Todos los jugadores fueron desmuteados durante la votacion. Discute!"
+	}
+}
