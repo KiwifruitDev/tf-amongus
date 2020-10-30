@@ -1,0 +1,239 @@
+"Phrases"
+{
+	"impostor_prefix"
+	{
+		"chi"	"*假冒者*"
+	}
+	"ghost_prefix"
+	{
+		"chi"    "(幽灵)"
+	}
+	"impostor_votingdiscriminator"
+	{
+		"chi"	"(假冒者)"
+	}
+	"color_red"
+	{
+		"chi"	"红"
+	}
+	"color_blue"
+	{
+		"chi"	"蓝"
+	}
+	"color_black"
+	{
+		"chi"	"黑"
+	}
+	"color_brown"
+	{
+		"chi"	"棕"
+	}
+	"color_cyan"
+	{
+		"chi"	"青"
+	}
+	"color_green"
+	{
+		"chi"	"绿"
+	}
+	"color_lime"
+	{
+		"chi"	"酸橙"
+	}
+	"color_orange"
+	{
+		"chi"	"橙"
+	}
+	"color_pink"
+	{
+		"chi"	"粉"
+	}
+	"color_purple"
+	{
+		"chi"	"紫"
+	}
+	"color_white"
+	{
+		"chi"	"白"
+	}
+	"color_yellow"
+	{
+		"chi"	"黄"
+	}
+	"color_default"
+	{
+		"chi"	"某人"
+	}
+	"reason_foundbody"
+	{
+		"chi"	"{1} 刚刚发现了 {2} 的尸体！"
+	}
+	"reason_emergencybutton"
+	{
+		"chi"	"{1} 呼叫了一次紧急会议！"
+	}
+	"state_crewmate"
+	{
+		"chi"	"你是一名船员！"
+	}
+	"state_impostor"
+	{
+		"chi"	"你是一名假冒者！"
+	}
+	"voted"
+	{
+		"chi"	"{1} {default} 投票给了 {2}{default}！"
+	}
+	"skipped"
+	{
+		"chi"	"{1} {default} 投票了跳过！"
+	}
+	"notenoughplayers"
+	{
+		"chi"	"目前没有足够的玩家来支持 {1} 名假冒者！ ({2}/{3})"
+	}
+	"votingstate_prevoting"
+	{
+		"chi"	"讨论！"
+	}
+	"votingstate_voting"
+	{
+		"chi"	"现在投票！"
+	}
+	"startedvote"
+	{
+		"chi"	"{1} 已开始投票！"
+	}
+	"untilvotingstarts"
+	{
+		"chi"	"在 {1} 秒后开始投票。"
+	}
+	"untilvotingends"
+	{
+		"chi"	"在 {1} 秒后投票结束。"
+	}
+	"untilejectionends"
+	{
+		"chi"	"在 {1} 秒后进行弹出！"
+	}
+	"reason_anonymous"
+	{
+		"chi"	"{1} 被弹出了！"
+	}
+	"reason_crewmate"
+	{
+		"chi"	"{1} 不是一名假冒者。"
+	}
+	"reason_impostor"
+	{
+		"chi"	"{1} 是一名假冒者。"
+	}
+	"reason_tie"
+	{
+		"chi"	"没有人被弹出。 (持平)"
+	}
+	"reason_skip"
+	{
+		"chi"	"没有人被弹出。 (跳过)"
+	}
+	"reason_disconnected"
+	{
+		"chi"	"没有人被弹出。 (玩家断开连接)"
+	}
+	"impostorsremain"
+	{
+		"chi"	"剩余 {1} 名假冒者。"
+	}
+	"knifedelay"
+	{
+		"chi"	"你在 {1} 秒后可以使用刀子。"
+	}
+	"knifedelayplural"
+	{
+		"chi"	"你在 {1} 秒后可以使用刀子。"
+	}
+	"dead"
+	{
+		"chi"	"你死了。"
+	}
+	"impostor_description"
+	{
+		"chi"	"破坏设施并杀死所有人。"
+	}
+	"ghost_description"
+	{
+		"chi"	"完成你的任务来获胜！"
+	}
+	"impostorghost_description"
+	{
+		"chi"	"你仍然可以破坏设施。"
+	}
+	"faketasks"
+	{
+		"chi"	"伪装任务："
+	}
+	"tasks"
+	{
+		"chi"	"任务："
+	}
+	"crewmates_win"
+	{
+		"chi"	"船员胜利！"
+	}
+	"impostors_win"
+	{
+		"chi"	"假冒者胜利！"
+	}
+	"default_win"
+	{
+		"chi"	"没有人胜利..."
+	}
+	"ghostreason_killed"
+	{
+		"chi"	"你被杀害了！"
+	}
+	"ghostreason_suicide"
+	{
+		"chi"	"你自杀了！"
+	}
+	"ghostreason_ejected"
+	{
+		"chi"	"你被弹出了！"
+	}
+	"ghostreason_generic"
+	{
+		"chi"	"你被票出了！"
+	}
+	"cantjoinnow"
+	{
+		"chi"	"你必须等待回合结束才可以加入！"
+	}
+	"shh"
+	{
+		"chi"	"所有玩家现在已被禁言！嘘..."
+	}
+	"ongoing"
+	{
+		"chi"	"你现在不可以加入！回合还在进行。"
+	}
+	"ventstate_insidevent"
+	{
+		"chi"	"你进入通风管道。"
+	}
+	"ventstate_ontopofvent"
+	{
+		"chi"	"按 呼叫医生！ 键来进入通风管道。"
+	}
+	"reportbody"
+	{
+		"chi"	"按 呼叫医生！ 键来报告尸体。"
+	}
+	"emergencybutton"
+	{
+		"chi"	"按 呼叫医生！ 键来呼叫紧急会议。"
+	}
+	"unmuted"
+	{
+		"chi"	"所有玩家已解除禁言。快讨论！"
+	}
+}
