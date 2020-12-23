@@ -1,0 +1,254 @@
+"Phrases"
+{
+	"impostor_prefix"
+	{
+		"ru"	"*Предатель*"
+	}
+	"ghost_prefix"
+	{
+		"ru"    "(ПРИЗРАК)"
+	}
+	"impostor_votingdiscriminator"
+	{
+		"ru"	"(Предатель)"
+	}
+	"color_red"
+	{
+		"ru"	"Красный"
+	}
+	"color_blue"
+	{
+		"ru"	"Синий"
+	}
+	"color_black"
+	{
+		"ru"	"Чёрный"
+	}
+	"color_brown"
+	{
+		"ru"	"Коричневый"
+	}
+	"color_cyan"
+	{
+		"ru"	"Голубой"
+	}
+	"color_green"
+	{
+		"ru"	"Зелёный"
+	}
+	"color_lime"
+	{
+		"ru"	"Зелёный лаймовый"
+	}
+	"color_orange"
+	{
+		"ru"	"Оранжевый"
+	}
+	"color_pink"
+	{
+		"ru"	"Розовый"
+	}
+	"color_purple"
+	{
+		"ru"	"Фиолетовый"
+	}
+	"color_white"
+	{
+		"ru"	"Белый"
+	}
+	"color_yellow"
+	{
+		"ru"	"Жёлтый"
+	}
+	"color_default"
+	{
+		"ru"	"кто-то"
+	}
+	"reason_foundbody"
+	{
+		"#format"	"{1:s},{2:s}"
+		"ru"	"{1} нашёл мёртвое тело {2}!"
+	}
+	"reason_emergencybutton"
+	{
+		"#format"	"{1:s}"
+		"ru"	"{1} вызвал собрание!"
+	}
+	"state_crewmate"
+	{
+		"ru"	"Вы член экипажа!"
+	}
+	"state_impostor"
+	{
+		"ru"	"Вы предатель!"
+	}
+	"voted"
+	{
+		"#format"	"{1:s},{2:s}"
+		"ru"	"{1} {default}проголосовал за {2}{default}!"
+	}
+	"skipped"
+	{
+		"#format"	"{1:s}"
+		"ru"	"{1} {default}проголосовал за пропуск!"
+	}
+	"notenoughplayers"
+	{
+		"#format"	"{1:i},{2:i},{3:i}"
+		"ru"	"Не хватает игроков для {1} предателей! ({2}/{3})"
+	}
+	"votingstate_prevoting"
+	{
+		"ru"	"Обсуждайте!"
+	}
+	"votingstate_voting"
+	{
+		"ru"	"Голосуйте сейчас!"
+	}
+	"startedvote"
+	{
+		"#format"	"{1:s}"
+		"ru"	"{1} начал голосование!"
+	}
+	"untilvotingstarts"
+	{
+		"#format"	"{1:i}"
+		"ru"	"{1} сек. до начала голосования."
+	}
+	"untilvotingends"
+	{
+		"#format"	"{1:i}"
+		"ru"	"{1} сек. до конца голосования."
+	}
+	"untilejectionends"
+	{
+		"#format"	"{1:i}"
+		"ru"	"{1} сек. до изгнания."
+	}
+	"reason_anonymous"
+	{
+		"#format"	"{1:s}"
+		"ru"	"{1} был изгнан."
+	}
+	"reason_crewmate"
+	{
+		"#format"	"{1:s}"
+		"ru"	"{1} не был предателем."
+	}
+	"reason_impostor"
+	{
+		"#format"	"{1:s}"
+		"ru"	"{1} был предателем."
+	}
+	"reason_tie"
+	{
+		"ru"	"Во время голосования была ничья, никого не выгнали."
+	}
+	"reason_skip"
+	{
+		"ru"	"Принято решение пропустить голосование."
+	}
+	"reason_disconnected"
+	{
+		"ru"	"Во время голосования игрок вышел из игры, никого не выгнали."
+	}
+	"impostorsremain"
+	{
+		"#format"	"{1:i}"
+		"ru"	"{1} предателей осталось."
+	}
+	"knifedelay"
+	{
+		"#format"	"{1:i}"
+		"ru"	"Вы можете использовать свой нож через {1} сек."
+	}
+	"knifedelayplural"
+	{
+		"#format"	"{1:i}"
+		"ru"	"Вы можете использовать свой нож через {1} сек."
+	}
+	"dead"
+	{
+		"ru"	"Вы мертвы."
+	}
+	"impostor_description"
+	{
+		"ru"	"Используй саботаж и убей всех."
+	}
+	"ghost_description"
+	{
+		"ru"	"Выполни свои задачи, чтобы победить!"
+	}
+	"impostorghost_description"
+	{
+		"ru"	"Вы всё ещё можете использовать саботаж."
+	}
+	"faketasks"
+	{
+		"ru"	"Фальшивые задачи:"
+	}
+	"tasks"
+	{
+		"ru"	"Задачи:"
+	}
+	"crewmates_win"
+	{
+		"ru"	"Члены экипажа победили!"
+	}
+	"impostors_win"
+	{
+		"ru"	"Предатели победили!"
+	}
+	"default_win"
+	{
+		"ru"	"Никто не победил..."
+	}
+	"ghostreason_killed"
+	{
+		"ru"	"Вы были убиты!"
+	}
+	"ghostreason_suicide"
+	{
+		"ru"	"Вы умерли сам по себе!"
+	}
+	"ghostreason_ejected"
+	{
+		"ru"	"Вас выгнали!"
+	}
+	"ghostreason_generic"
+	{
+		"ru"	"Вы проиграли в голосовании!"
+	}
+	"cantjoinnow"
+	{
+		"ru"	"Вы должны дождаться конца раунда, чтобы возродиться!"
+	}
+	"shh"
+	{
+		"ru"	"С этого момента все игроки заглушены! Шшш..."
+	}
+	"ongoing"
+	{
+		"ru"	"Вы не можете присоединиться к игре прямо сейчас! Раунд продолжается."
+	}
+	"ventstate_insidevent"
+	{
+		"ru"	"Вы в вентиляции."
+	}
+	"ventstate_ontopofvent"
+	{
+		"ru"	"Позовите медика, чтобы войти в вентиляцию."
+	}
+	"reportbody"
+	{
+		"ru"	"Позовите медика, чтобы доложить о трупе."
+	}
+	"emergencybutton"
+	{
+		"ru"	"Позовите медика, чтобы вызвать собрание."
+	}
+	"unmuted"
+	{
+		"ru"	"Все игроки могут говорить во время голосования. Обсуждайте!"
+	}
+}
